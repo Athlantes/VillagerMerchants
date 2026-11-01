@@ -79,9 +79,12 @@ public class CustomerTradeListener implements Listener {
     public void onClose(InventoryCloseEvent e) {
         if (e.getInventory().getType() != InventoryType.MERCHANT) return;
         if (!(e.getPlayer() instanceof Player p)) return;
+        // Money trades keep a display token in the payment slot. This event fires before vanilla hands
+        // the trade slots back to the player, so remove it here or it would end up in their inventory.
+        if (e.getInventory() instanceof MerchantInventory mi) clearTokens(mi);
+        CurrencyToken.scrub(p);
         Session s = sessions.remove(p.getUniqueId());
         if (s == null) return;
-        CurrencyToken.scrub(p);
         if (s.bought) {
             Shop shop = plugin.getShopManager().getShop(s.shopId);
             if (shop != null) plugin.getRatings().maybePrompt(p, shop);
@@ -92,9 +95,12 @@ public class CustomerTradeListener implements Listener {
     public void onQuit(PlayerQuitEvent e) { sessions.remove(e.getPlayer().getUniqueId()); }
 
     /**
-     * Vanilla can only fill the result slot from items in the customer's trade slots, which a
-     * money trade doesn't have. So when a money trade is selected we put its result in the slot
-     * ourselves (one tick later, after vanilla finished its own selection handling).
+     * A money trade has no payment items, and the vanilla client recalculates the result slot from the
+     * payment slots on every slot change (so a result we place there alone gets wiped). Instead we put
+     * the trade's display token into the payment slot: client and server then both see a valid payment
+     * and show the result themselves. The token is display-only: it can't be taken out, is never
+     * consumed, and is removed again on close.
+     * Runs one tick after the selection so it executes after vanilla's own selection handling.
      */
     @EventHandler
     public void onSelect(TradeSelectEvent e) {
@@ -103,25 +109,36 @@ public class CustomerTradeListener implements Listener {
         if (s == null) return;
         Shop shop = plugin.getShopManager().getShop(s.shopId);
         if (shop == null) return;
-        MerchantInventory mi = e.getInventory();
         int idx = e.getIndex();
-        Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, s, mi, shop, idx));
+        Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, s, shop, idx));
     }
 
-    /** Money trade: show the result so it can be clicked. Item trade: clear any stale result we put there. */
-    private void syncResultSlot(Player p, Session s, MerchantInventory mi, Shop shop, int idx) {
+    /** Money trade: place its token in the payment slot. Item trade: make sure no token is left over. */
+    private void syncResultSlot(Player p, Session s, Shop shop, int idx) {
         if (sessions.get(p.getUniqueId()) != s) return;
-        if (p.getOpenInventory().getTopInventory() != mi) return;
+        if (!(p.getOpenInventory().getTopInventory() instanceof MerchantInventory mi)) return;
         List<Trade> trades = shop.completeTrades();
         if (idx < 0 || idx >= trades.size()) return;
-        if (!isEmpty(mi.getItem(0)) || !isEmpty(mi.getItem(1))) return; // vanilla filled payments: it owns the result slot
+
+        // when the selection changes vanilla moves the old payment slot content into the player's bag
+        CurrencyToken.scrub(p);
+        clearTokens(mi);
+
+        if (!isEmpty(mi.getItem(0)) || !isEmpty(mi.getItem(1))) return; // real payment items: vanilla owns the result slot
         Trade t = trades.get(idx);
-        if (t.isMoney()) {
-            ItemStack res = t.getResult();
-            boolean inStock = shop.getStorage().containsAtLeast(res, res.getAmount());
-            mi.setItem(2, inStock ? res.clone() : null);
-        } else {
-            mi.setItem(2, null);
+        if (!t.isMoney()) { mi.setItem(2, null); return; }
+
+        Merchant merchant = mi.getMerchant();
+        if (idx >= merchant.getRecipeCount()) return;
+        List<ItemStack> ingredients = merchant.getRecipe(idx).getIngredients();
+        if (ingredients.isEmpty()) return;
+        // use the recipe's own ingredient so it matches exactly; setting it makes vanilla compute the result
+        mi.setItem(0, ingredients.get(0).clone());
+    }
+
+    private static void clearTokens(MerchantInventory mi) {
+        for (int i = 0; i < 2; i++) {
+            if (CurrencyToken.isToken(mi.getItem(i))) mi.setItem(i, null);
         }
     }
 
@@ -133,7 +150,11 @@ public class CustomerTradeListener implements Listener {
         if (!(e.getWhoClicked() instanceof Player p)) return;
         Session session = sessions.get(p.getUniqueId());
         if (session == null) return;                                  // not one of our shops
-        if (e.getClickedInventory() != mi || e.getSlot() != 2) return; // only the result slot is special
+        if (e.getRawSlot() < 2 && CurrencyToken.isToken(e.getCurrentItem())) { // display token: look, don't touch
+            e.setCancelled(true);
+            return;
+        }
+        if (e.getRawSlot() != 2) return;                               // only the result slot is special
 
         e.setCancelled(true);
         ClickType c = e.getClick();
@@ -154,7 +175,10 @@ public class CustomerTradeListener implements Listener {
         int idx = mi.getSelectedRecipeIndex();
         if (idx < 0 || idx >= trades.size()) return;
         Trade trade = trades.get(idx);
-        MerchantRecipe sel = mi.getSelectedRecipe();
+        // NOTE: mi.getSelectedRecipe() is the *active offer* and is null while the payment slots are empty
+        // (always the case for money trades), so check the recipe list we gave the merchant instead.
+        Merchant merchant = mi.getMerchant();
+        MerchantRecipe sel = idx < merchant.getRecipeCount() ? merchant.getRecipe(idx) : null;
         if (sel == null || !sel.getResult().isSimilar(trade.getResult())) {
             p.closeInventory();
             p.sendMessage(Text.mm("<yellow>The shop was updated. Please reopen it."));
@@ -178,11 +202,10 @@ public class CustomerTradeListener implements Listener {
             session.bought = true;
             plugin.getTransactions().recordSale(p, shop, trade, done);
             plugin.getRatings().recordPurchase(p, shop);
-            Merchant m = mi.getMerchant();
-            m.setRecipes(sm.buildRecipes(shop)); // re-lock sold-out trades
+            merchant.setRecipes(sm.buildRecipes(shop)); // re-lock sold-out trades
         }
         final int selected = idx;
-        Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, session, mi, shop, selected));
+        Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, session, shop, selected));
         p.updateInventory();
     }
 
