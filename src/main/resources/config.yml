@@ -1,0 +1,77 @@
+# VillagerMerchants configuration
+autosave-seconds: 30
+
+defaults:
+  unlocked-slots: 3        # trade slots every new player starts with
+
+rent:
+  price: 5000.0            # price for 'base-days' of rent
+  base-days: 7
+  grace-hours: 48          # owner can still renew / empty storage after expiry
+  max-shops-per-player: 3
+  cancel-refund: 0.5       # fraction of the remaining rent value refunded on cancel
+
+# cost of next level = base-cost * multiplier ^ currentLevel
+upgrades:
+  slots:
+    max-level: 24
+    base-cost: 10000.0
+    multiplier: 1.35
+    per-level: 1           # extra trade slots per level
+  tax:
+    max-level: 5
+    base-cost: 25000.0
+    multiplier: 1.8
+    per-level: 0.05        # rent discount per level (5% each)
+  duration:
+    max-level: 4
+    base-cost: 15000.0
+    multiplier: 1.6
+    per-level: 7           # extra max days of rent per level
+
+skins:                     # permanent unlocks (Plains + Unemployed are free)
+  type-price: 15000.0
+  profession-price: 25000.0
+
+npc:
+  look-at-players: true
+  look-radius: 6.0
+  look-update-ticks: 4
+
+money:
+  enabled: true                 # allow money-priced trades (shift-left-click "Payment 1" in the trade editor)
+  token-material: EMERALD       # item shown as the price inside the trading UI (display only, never given out)
+  min-price: 0.01
+  max-price: 1000000000
+
+notifications:
+  enabled: true
+  chat: true
+  actionbar: true
+  sound: "entity.experience_orb.pickup"   # '' to disable
+  join-summary: true            # "while you were away" recap for sellers
+  join-max-lines: 5             # recent sales listed in the recap
+  join-delay-ticks: 60
+  # MiniMessage. Placeholders: <buyer> <item> <qty> <price> <paid>
+  format:
+    money: "<green>[Sale] <white><buyer></white> bought <white><qty>x <item></white> for <gold><price></gold>"
+    item: "<green>[Trade] <white><buyer></white> traded <white><paid></white> for <white><qty>x <item></white>"
+
+log:
+  retention-days: 0             # 0 = keep the transaction log forever
+
+directory:
+  hide-empty-shops: true        # only list shops that have at least one live offer
+  show-coordinates: false
+  teleport:
+    enabled: true
+    cost: 0.0                   # charged to the player, not paid to anyone
+    cooldown-seconds: 60
+    warmup-seconds: 3           # cancelled if the player moves
+
+ratings:
+  enabled: true
+  require-purchase: true        # must have bought from the shop to rate it
+  prompt-after-purchase: true   # clickable stars in chat after closing the shop
+  prompt-cooldown-minutes: 30
+  show-on-nametag: true

@@ -1,0 +1,33 @@
+name: VillagerMerchants
+main: org.riftlabs.villagerMerchants.VillagerMerchants
+version: 1.0.0
+api-version: '1.21'
+author: RiftLabs
+description: Premium player-rented villager shops with native merchant UI.
+depend: [Vault]
+
+commands:
+  vm:
+    description: VillagerMerchants main command
+    aliases: [villagermerchants]
+    usage: /vm <create|remove|reload|claim>
+  shops:
+    description: Browse open shops and teleport to them
+    usage: /shops
+
+permissions:
+  villagermerchants.admin:
+    description: Create/remove shop NPCs, reload config
+    default: op
+  villagermerchants.use:
+    description: Rent and use shops
+    default: true
+  villagermerchants.shops:
+    description: Open the /shops directory
+    default: true
+  villagermerchants.shops.teleport:
+    description: Teleport to shops from the directory
+    default: true
+  villagermerchants.shops.bypass:
+    description: No cooldown, warm-up or cost when teleporting to shops
+    default: op
