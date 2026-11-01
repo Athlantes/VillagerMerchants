@@ -66,6 +66,9 @@
 #    color-spread: 0        0-1: offsets the colour along the shape (rainbow rings etc.). Costs a bit more CPU
 #  material: STONE          block/item for block, falling_dust, block_marker, item particles
 #
+#  SIZE GUIDE: a villager is ~0.6 wide and ~1.95 tall. Keep radius <= 0.7 (feet/ground effects up to 0.9)
+#  and top of effect <= ~2.7 so the villager stays visible. Prefer few points + higher interval.
+#
 #  PERFORMANCE: cost ~ (points x 20 / interval) x players nearby, per shop. Effects nobody is near cost nothing.
 # ═══════════════════════════════════════════════════════════════════════════════════
 
@@ -87,11 +90,11 @@ effects:
       sparkle:
         shape: CLOUD
         particle: HAPPY_VILLAGER
-        points: 4
-        radius: 0.7
-        height: 2.0
-        interval: 5
-        chance: 0.8
+        points: 2
+        radius: 0.5
+        height: 1.9
+        interval: 8
+        chance: 0.7
 
   ember_ring:
     name: "<gradient:#FF8800:#FF2200>🔥 Ember Ring"
@@ -102,20 +105,19 @@ effects:
       ring:
         shape: RING
         particle: FLAME
-        points: 14
-        radius: 0.9
-        y: 0.15
-        interval: 2
-        jitter: 0.02
+        points: 10
+        radius: 0.65
+        y: 0.1
+        interval: 3
         animation: { spin: 8 }
       embers:
         shape: RISING
         particle: SMALL_FLAME
-        points: 5
-        radius: 0.8
-        height: 1.4
-        period: 25
-        interval: 2
+        points: 3
+        radius: 0.55
+        height: 1.2
+        period: 30
+        interval: 4
 
   love_aura:
     name: "<gradient:#FF4D88:#FF9ECF>❤ Love Aura"
@@ -126,20 +128,20 @@ effects:
       hearts:
         shape: RISING
         particle: HEART
-        points: 5
-        radius: 0.7
-        height: 2.2
-        period: 45
-        interval: 6
+        points: 3
+        radius: 0.5
+        height: 2.0
+        period: 50
+        interval: 8
       ring:
         shape: RING
         particle: DUST
         color: "#FF69B4"
-        size: 0.8
-        points: 12
-        radius: 0.8
+        size: 0.7
+        points: 10
+        radius: 0.65
         y: 0.1
-        interval: 3
+        interval: 4
         animation: { spin: -6 }
 
   soul_orbit:
@@ -152,20 +154,20 @@ effects:
         shape: ORBIT
         particle: SOUL_FIRE_FLAME
         strands: 3
-        trail: 5
+        trail: 3
         trail-spacing: 9
-        radius: 0.9
+        radius: 0.65
         y: 1.2
-        interval: 1
-        animation: { spin: 10, tilt-x: 15, bob-amplitude: 0.1, bob-speed: 5 }
+        interval: 2
+        animation: { spin: 10, tilt-x: 15, bob-amplitude: 0.08, bob-speed: 5 }
       souls:
         shape: RISING
         particle: SOUL
-        points: 3
-        radius: 0.5
-        height: 2.0
+        points: 2
+        radius: 0.4
+        height: 1.9
         period: 50
-        interval: 4
+        interval: 6
 
   snowfall:
     name: "<gradient:white:#9AD7FF>❄ Snowfall"
@@ -176,11 +178,11 @@ effects:
       flakes:
         shape: RAIN
         particle: SNOWFLAKE
-        points: 10
-        radius: 1.1
-        height: 2.8
-        period: 40
-        interval: 2
+        points: 6
+        radius: 0.7
+        height: 2.5
+        period: 45
+        interval: 3
 
   pulse_shockwave:
     name: "<gradient:#00E5FF:#0066FF>◎ Shockwave"
@@ -193,13 +195,13 @@ effects:
         particle: DUST
         color-mode: GRADIENT
         colors: ["#00E5FF", "#0066FF"]
-        size: 0.8
+        size: 0.7
         strands: 2
-        period: 36
-        points: 28
-        radius: 1.8
+        period: 40
+        points: 20
+        radius: 1.3
         y: 0.1
-        interval: 2
+        interval: 3
 
   golden_halo:
     name: "<gradient:#FFD700:#FFF4A3>✧ Golden Halo"
@@ -211,21 +213,21 @@ effects:
         shape: RING
         particle: DUST
         color: "#FFD700"
-        size: 0.7
-        points: 16
-        radius: 0.4
-        y: 2.35
-        interval: 2
-        animation: { spin: 10, bob-amplitude: 0.06, bob-speed: 8 }
+        size: 0.6
+        points: 12
+        radius: 0.3
+        y: 2.25
+        interval: 3
+        animation: { spin: 10, bob-amplitude: 0.05, bob-speed: 8 }
       glints:
         shape: CLOUD
         particle: END_ROD
         points: 1
-        radius: 0.4
+        radius: 0.3
         height: 0.1
-        y: 2.35
-        chance: 0.5
-        interval: 6
+        y: 2.25
+        chance: 0.4
+        interval: 8
 
   enchanted_helix:
     name: "<gradient:#B388FF:#E1BEE7>✦ Arcane Helix"
@@ -235,14 +237,26 @@ effects:
     layers:
       helix:
         shape: HELIX
-        particle: END_ROD
+        particle: DUST
+        color-mode: GRADIENT
+        colors: ["#B388FF", "#E1BEE7", "#7C4DFF"]
+        color-spread: 1.0
+        size: 0.45
         strands: 2
-        points: 22
-        radius: 0.7
-        height: 2.2
-        turns: 2
+        points: 7
+        radius: 0.6
+        height: 2.0
+        turns: 1.25
         interval: 2
         animation: { spin: 8 }
+      glints:
+        shape: CLOUD
+        particle: END_ROD
+        points: 1
+        radius: 0.6
+        height: 1.9
+        chance: 0.3
+        interval: 10
 
   cherry_blossom:
     name: "<gradient:#FFB7C5:#FF80AB>✿ Cherry Blossom"
@@ -253,20 +267,20 @@ effects:
       petals:
         shape: CLOUD
         particle: CHERRY_LEAVES
-        points: 2
-        radius: 1.0
-        height: 0.4
-        y: 2.8
-        interval: 3
+        points: 1
+        radius: 0.6
+        height: 0.3
+        y: 2.6
+        interval: 5
       ground:
         shape: RING
         particle: DUST
         color: "#FFB7C5"
-        size: 0.6
-        points: 10
-        radius: 1.0
+        size: 0.5
+        points: 8
+        radius: 0.7
         y: 0.05
-        interval: 4
+        interval: 5
         animation: { spin: 3 }
 
   rainbow_ring:
@@ -281,11 +295,11 @@ effects:
         color-mode: RAINBOW
         color-spread: 1.0
         color-speed: 2.5
-        size: 0.9
-        points: 24
-        radius: 0.85
+        size: 0.7
+        points: 18
+        radius: 0.6
         y: 1.0
-        interval: 2
+        interval: 3
         animation: { spin: 5 }
 
   rainbow_spiral:
@@ -300,15 +314,15 @@ effects:
         color-mode: RAINBOW
         color-spread: 0.5
         color-speed: 3
-        size: 0.9
-        strands: 3
-        trail: 6
+        size: 0.7
+        strands: 2
+        trail: 4
         trail-spacing: 0.025
         turns: 2
-        radius: 0.7
-        height: 2.3
-        period: 40
-        interval: 1
+        radius: 0.5
+        height: 2.1
+        period: 45
+        interval: 2
 
   emerald_vortex:
     name: "<gradient:#00C853:#B9F6CA>🌪 Emerald Vortex"
@@ -322,14 +336,14 @@ effects:
         color-mode: GRADIENT
         colors: ["#00C853", "#B9F6CA", "#00A040"]
         color-spread: 0.5
-        size: 0.8
-        strands: 4
-        points: 10
-        radius: 0.25
-        taper: -3.0
-        height: 2.4
+        size: 0.7
+        strands: 3
+        points: 8
+        radius: 0.15
+        taper: -2.5
+        height: 2.2
         turns: 1.2
-        interval: 2
+        interval: 3
         animation: { spin: 14 }
 
   fountain_of_gold:
@@ -343,14 +357,14 @@ effects:
         particle: DUST
         color-mode: GRADIENT
         colors: ["#FFD700", "#FFF4A3"]
-        size: 0.7
-        strands: 5
-        points: 7
-        radius: 0.9
-        height: 1.4
-        y: 0.8
-        period: 28
-        interval: 2
+        size: 0.6
+        strands: 4
+        points: 5
+        radius: 0.7
+        height: 1.1
+        y: 0.5
+        period: 30
+        interval: 3
         animation: { spin: 3 }
 
   storm_cloud:
@@ -362,64 +376,70 @@ effects:
       cloud:
         shape: CLOUD
         particle: CLOUD
-        points: 3
-        radius: 0.55
-        height: 0.25
+        points: 2
+        radius: 0.4
+        height: 0.2
         y: 2.5
-        interval: 3
+        interval: 4
       dark:
         shape: CLOUD
         particle: DUST
         color: "#555566"
-        size: 1.6
-        points: 2
-        radius: 0.5
-        height: 0.2
+        size: 1.2
+        points: 1
+        radius: 0.35
+        height: 0.15
         y: 2.5
-        interval: 2
+        interval: 3
       rain:
         shape: RAIN
         particle: DUST
         color: "#4DA6FF"
-        size: 0.5
-        points: 8
-        radius: 0.5
+        size: 0.4
+        points: 4
+        radius: 0.35
         height: 2.4
-        period: 14
-        interval: 1
+        period: 16
+        interval: 2
       sparks:
         shape: CLOUD
         particle: ELECTRIC_SPARK
         points: 1
-        radius: 0.5
+        radius: 0.35
         height: 0.2
         y: 2.4
         chance: 0.15
-        interval: 4
+        interval: 6
 
   celebration:
     name: "<gradient:#FF5252:#FFEB3B:#69F0AE>🎉 Celebration"
     icon: FIREWORK_ROCKET
     price: 22000.0
-    description: ["Non-stop party: totems and", "firework fountains."]
+    description: ["A festive burst of totem", "sparkles and confetti."]
     layers:
       totems:
         shape: CLOUD
         particle: TOTEM_OF_UNDYING
-        speed: 0.15
-        points: 2
-        radius: 0.7
-        height: 2.0
-        interval: 8
-      sparks:
+        speed: 0.08
+        points: 1
+        radius: 0.4
+        height: 1.4
+        y: 0.4
+        interval: 20
+        chance: 0.8
+      confetti:
         shape: FOUNTAIN
-        particle: FIREWORK
-        strands: 4
-        points: 3
-        radius: 1.0
-        height: 1.6
+        particle: DUST
+        color-mode: RANDOM
+        colors: ["#FF5252", "#FFEB3B", "#69F0AE", "#448AFF"]
+        size: 0.5
+        strands: 3
+        points: 4
+        radius: 0.6
+        height: 1.0
+        y: 1.0
         period: 30
-        interval: 3
+        interval: 4
         animation: { spin: 4 }
 
   star_crown:
@@ -433,20 +453,20 @@ effects:
         particle: DUST
         color-mode: GRADIENT
         colors: ["#FFE066", "#FFAA00"]
-        size: 0.8
-        points: 30
-        radius: 0.5
+        size: 0.6
+        points: 20
+        radius: 0.35
         y: 2.4
-        interval: 2
-        animation: { spin: 12, bob-amplitude: 0.08, bob-speed: 6 }
+        interval: 3
+        animation: { spin: 12, bob-amplitude: 0.06, bob-speed: 6 }
       sparkle:
         shape: ORBIT
         particle: END_ROD
         strands: 2
-        radius: 0.5
+        radius: 0.4
         y: 2.4
-        interval: 2
-        animation: { spin: -15, bob-amplitude: 0.08, bob-speed: 6 }
+        interval: 3
+        animation: { spin: -15, bob-amplitude: 0.06, bob-speed: 6 }
 
   void_portal:
     name: "<gradient:#8A2BE2:#1A0033>🌀 Void Sphere"
@@ -459,19 +479,19 @@ effects:
         particle: DUST_COLOR_TRANSITION
         color: "#8A2BE2"
         to-color: "#000000"
-        size: 1.0
-        points: 36
-        radius: 0.95
-        y: 1.0
-        interval: 2
+        size: 0.8
+        points: 20
+        radius: 0.45
+        y: 2.5
+        interval: 3
         animation: { spin: 6, tilt-z: 20 }
       motes:
         shape: CLOUD
         particle: REVERSE_PORTAL
-        points: 4
-        radius: 1.0
+        points: 2
+        radius: 0.6
         height: 1.8
-        interval: 2
+        interval: 4
 
   atom:
     name: "<gradient:#00FFFF:#2979FF>⚛ Atom"
@@ -484,36 +504,36 @@ effects:
         particle: DUST_COLOR_TRANSITION
         color: "#00FFFF"
         to-color: "#0000FF"
-        size: 0.7
-        trail: 7
+        size: 0.5
+        trail: 4
         trail-spacing: 10
-        radius: 1.0
+        radius: 0.7
         y: 1.1
-        interval: 1
+        interval: 2
         animation: { spin: 12 }
       electron_b:
         shape: ORBIT
         particle: DUST_COLOR_TRANSITION
         color: "#00FFFF"
         to-color: "#0000FF"
-        size: 0.7
-        trail: 7
+        size: 0.5
+        trail: 4
         trail-spacing: 10
-        radius: 1.0
+        radius: 0.7
         y: 1.1
-        interval: 1
+        interval: 2
         animation: { spin: 10, tilt-x: 60 }
       electron_c:
         shape: ORBIT
         particle: DUST_COLOR_TRANSITION
         color: "#00FFFF"
         to-color: "#0000FF"
-        size: 0.7
-        trail: 7
+        size: 0.5
+        trail: 4
         trail-spacing: 10
-        radius: 1.0
+        radius: 0.7
         y: 1.1
-        interval: 1
+        interval: 2
         animation: { spin: 14, tilt-x: -60, tumble: 2 }
       nucleus:
         shape: CLOUD
@@ -522,7 +542,7 @@ effects:
         radius: 0.1
         height: 0.1
         y: 1.1
-        interval: 3
+        interval: 4
 
   fire_wings:
     name: "<gradient:#FFAA00:#FF2200>🔥 Phoenix Wings"
@@ -535,20 +555,20 @@ effects:
         particle: DUST_COLOR_TRANSITION
         color: "#FFAA00"
         to-color: "#FF2200"
-        size: 1.0
-        points: 120
-        radius: 1.0
+        size: 0.8
+        points: 80
+        radius: 0.8
         y: 1.3
-        interval: 4
-        animation: { flap-amplitude: 30, flap-speed: 14 }
+        interval: 5
+        animation: { flap-amplitude: 25, flap-speed: 14 }
       embers:
         shape: CLOUD
         particle: SMALL_FLAME
         points: 1
-        radius: 0.7
-        height: 1.8
-        chance: 0.5
-        interval: 3
+        radius: 0.5
+        height: 1.6
+        chance: 0.4
+        interval: 5
 
   angel_wings:
     name: "<gradient:white:#FFF3B0>🕊 Angel Wings"
@@ -563,20 +583,20 @@ effects:
         colors: ["#FFFFFF", "#FFF3B0", "#FFFFFF"]
         color-spread: 1.0
         color-speed: 1.5
-        size: 0.8
-        points: 120
-        radius: 1.1
+        size: 0.7
+        points: 80
+        radius: 0.85
         y: 1.3
-        interval: 4
-        animation: { flap-amplitude: 18, flap-speed: 8 }
+        interval: 5
+        animation: { flap-amplitude: 15, flap-speed: 8 }
       glints:
         shape: CLOUD
         particle: END_ROD
         points: 1
-        radius: 0.9
-        height: 1.8
-        chance: 0.4
-        interval: 4
+        radius: 0.6
+        height: 1.6
+        chance: 0.3
+        interval: 6
 
   # ───────────────────────────── pack 2 ─────────────────────────────
 
@@ -590,19 +610,19 @@ effects:
         shape: CLOUD
         particle: GLOW
         points: 2
-        radius: 1.2
-        height: 2.2
+        radius: 0.8
+        height: 2.0
         jitter: 0.05
-        chance: 0.7
-        interval: 6
+        chance: 0.6
+        interval: 8
       light:
         shape: CLOUD
         particle: END_ROD
         points: 1
-        radius: 1.0
-        height: 2.0
-        chance: 0.3
-        interval: 8
+        radius: 0.7
+        height: 1.8
+        chance: 0.25
+        interval: 10
 
   ocean_bubbles:
     name: "<gradient:#00E5FF:#2979FF>🫧 Ocean Bubbles"
@@ -613,23 +633,23 @@ effects:
       bubbles:
         shape: RISING
         particle: BUBBLE_POP
-        points: 7
-        radius: 0.7
-        height: 2.2
+        points: 4
+        radius: 0.5
+        height: 2.0
         period: 45
-        interval: 3
+        interval: 5
       tide:
         shape: RING
         particle: DUST
         color-mode: GRADIENT
         colors: ["#00E5FF", "#2979FF", "#00E5FF"]
         color-spread: 1.0
-        size: 0.7
-        points: 16
-        radius: 0.9
+        size: 0.6
+        points: 12
+        radius: 0.65
         y: 0.1
-        interval: 3
-        animation: { spin: 4, bob-amplitude: 0.05, bob-speed: 10 }
+        interval: 4
+        animation: { spin: 4, bob-amplitude: 0.04, bob-speed: 10 }
 
   autumn_leaves:
     name: "<gradient:#FF6F00:#BF360C>🍂 Autumn Leaves"
@@ -643,39 +663,39 @@ effects:
         color-mode: CYCLE
         colors: ["#FF6F00", "#E65100", "#8D4E1B", "#BF360C"]
         color-spread: 1.0
-        size: 0.8
-        points: 10
-        radius: 1.0
-        height: 2.8
+        size: 0.7
+        points: 6
+        radius: 0.7
+        height: 2.5
         period: 60
-        interval: 2
+        interval: 3
         animation: { spin: 3 }
 
   heartbeat:
     name: "<gradient:#FF1744:#FF8A80>♥ Heartbeat"
     icon: GLISTERING_MELON_SLICE
     price: 9500.0
-    description: ["A big red heart beats", "and spins above the shop."]
+    description: ["A red heart beats", "and spins above the shop."]
     layers:
       heart:
         shape: HEART
         particle: DUST
         color: "#FF1744"
-        size: 0.8
-        points: 28
-        radius: 0.4
-        y: 2.5
-        interval: 2
-        animation: { spin: 6, pulse-amplitude: 0.25, pulse-speed: 30 }
+        size: 0.6
+        points: 20
+        radius: 0.3
+        y: 2.4
+        interval: 3
+        animation: { spin: 6, pulse-amplitude: 0.2, pulse-speed: 30 }
       love:
         shape: CLOUD
         particle: HEART
         points: 1
-        radius: 0.3
+        radius: 0.25
         height: 0.2
-        y: 2.5
-        chance: 0.5
-        interval: 10
+        y: 2.4
+        chance: 0.4
+        interval: 12
 
   royal_crown:
     name: "<gradient:#FFD700:#FFF176>♛ Royal Crown"
@@ -689,24 +709,24 @@ effects:
         color-mode: GRADIENT
         colors: ["#FFC400", "#FFF176", "#FFC400"]
         color-spread: 1.0
-        size: 0.7
+        size: 0.6
         strands: 6
-        points: 36
-        radius: 0.38
-        height: 0.3
-        y: 2.25
-        interval: 2
-        animation: { spin: 4, bob-amplitude: 0.04, bob-speed: 6 }
+        points: 24
+        radius: 0.3
+        height: 0.25
+        y: 2.2
+        interval: 3
+        animation: { spin: 4, bob-amplitude: 0.03, bob-speed: 6 }
       jewels:
         shape: ORBIT
         particle: DUST
         color-mode: CYCLE
         colors: ["#FF1744", "#2979FF", "#00E676"]
-        size: 0.9
+        size: 0.8
         strands: 3
-        radius: 0.38
-        y: 2.55
-        interval: 2
+        radius: 0.3
+        y: 2.45
+        interval: 3
         animation: { spin: 4 }
 
   lava_geyser:
@@ -720,48 +740,48 @@ effects:
         particle: DUST_COLOR_TRANSITION
         color: "#FFAB00"
         to-color: "#B71C1C"
-        size: 0.9
-        strands: 6
-        points: 6
-        radius: 1.0
-        height: 1.8
+        size: 0.7
+        strands: 4
+        points: 5
+        radius: 0.7
+        height: 1.2
         y: 0.1
-        period: 24
-        interval: 2
+        period: 26
+        interval: 3
         animation: { spin: 5 }
       glow:
         shape: RING
         particle: FLAME
-        points: 12
-        radius: 0.4
+        points: 8
+        radius: 0.35
         y: 0.1
-        interval: 4
+        interval: 5
         animation: { spin: -10 }
 
   electric_halo:
     name: "<gradient:#18FFFF:#FFFF00>⚡ Electric Halo"
     icon: COPPER_INGOT
     price: 24000.0
-    description: ["Four crackling sparks race", "around on tumbling orbits."]
+    description: ["Three crackling sparks race", "around on tumbling orbits."]
     layers:
       sparks:
         shape: ORBIT
         particle: ELECTRIC_SPARK
-        strands: 4
-        trail: 3
+        strands: 3
+        trail: 2
         trail-spacing: 12
-        radius: 0.95
+        radius: 0.7
         y: 1.2
-        interval: 1
+        interval: 2
         animation: { spin: 18, tilt-x: 20, tumble: 3 }
       arcs:
         shape: CLOUD
         particle: ELECTRIC_SPARK
-        points: 2
-        radius: 0.8
-        height: 2.0
+        points: 1
+        radius: 0.6
+        height: 1.8
         chance: 0.4
-        interval: 3
+        interval: 5
 
   dna_helix:
     name: "<gradient:#FF5252:#448AFF>🧬 DNA Helix"
@@ -773,34 +793,34 @@ effects:
         shape: HELIX
         particle: DUST
         color: "#FF5252"
-        size: 0.8
+        size: 0.6
         strands: 1
-        points: 30
-        radius: 0.5
-        height: 2.3
-        turns: 2.5
-        interval: 2
+        points: 20
+        radius: 0.4
+        height: 2.0
+        turns: 2
+        interval: 3
         animation: { spin: 7 }
       blue_strand:
         shape: HELIX
         particle: DUST
         color: "#448AFF"
-        size: 0.8
+        size: 0.6
         strands: 1
-        points: 30
-        radius: 0.5
-        height: 2.3
-        turns: 2.5
-        interval: 2
+        points: 20
+        radius: 0.4
+        height: 2.0
+        turns: 2
+        interval: 3
         animation: { spin: 7, phase: 180 }
       rungs:
         shape: RISING
         particle: END_ROD
-        points: 4
-        radius: 0.5
-        height: 2.3
+        points: 2
+        radius: 0.4
+        height: 2.0
         period: 60
-        interval: 5
+        interval: 8
 
   galaxy:
     name: "<gradient:#7C4DFF:#FF4081:#18FFFF>🌌 Galaxy"
@@ -815,32 +835,32 @@ effects:
         colors: ["#7C4DFF", "#FF4081", "#18FFFF"]
         color-spread: 1.0
         color-speed: 1.5
-        size: 0.9
-        points: 40
-        radius: 0.8
-        y: 1.1
-        interval: 2
+        size: 0.7
+        points: 24
+        radius: 0.4
+        y: 2.5
+        interval: 3
         animation: { spin: 5, tilt-z: 25 }
       stars:
         shape: ORBIT
         particle: END_ROD
         strands: 3
-        trail: 4
+        trail: 2
         trail-spacing: 10
-        radius: 1.2
-        y: 1.1
-        interval: 1
+        radius: 0.7
+        y: 2.5
+        interval: 2
         animation: { spin: 9, tilt-z: 25 }
       dust:
         shape: CLOUD
         particle: DUST
         color-mode: RANDOM
         colors: ["#B388FF", "#FF80AB", "#80D8FF"]
-        size: 0.5
-        points: 3
-        radius: 1.1
-        height: 2.2
-        interval: 3
+        size: 0.4
+        points: 2
+        radius: 0.7
+        height: 2.0
+        interval: 5
 
   black_hole:
     name: "<gradient:#B388FF:#000000>⚫ Black Hole"
@@ -852,27 +872,27 @@ effects:
         shape: SPHERE
         particle: DUST
         color: "#000000"
-        size: 1.6
-        points: 14
-        radius: 0.22
-        y: 1.2
-        interval: 2
+        size: 1.2
+        points: 10
+        radius: 0.15
+        y: 2.5
+        interval: 3
       disk:
         shape: RING
         particle: DUST_COLOR_TRANSITION
         color: "#FFB300"
         to-color: "#6A1B9A"
-        size: 0.8
-        points: 30
-        radius: 0.9
-        y: 1.2
-        interval: 1
+        size: 0.6
+        points: 20
+        radius: 0.6
+        y: 2.5
+        interval: 2
         animation: { spin: 22, tilt-x: 72, tilt-z: 15 }
       pull:
         shape: CLOUD
         particle: REVERSE_PORTAL
-        points: 3
-        radius: 1.3
-        height: 1.6
-        y: 0.4
-        interval: 2
+        points: 2
+        radius: 0.8
+        height: 1.2
+        y: 1.4
+        interval: 4
