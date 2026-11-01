@@ -8,7 +8,10 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.riftlabs.villagerMerchants.effect.EffectDefinition;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.model.PlayerProfile;
@@ -23,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 public class CustomizationGui implements GuiHolder, ShopBound {
-    private enum Tab { SKINS, NAMETAGS }
+    private enum Tab { SKINS, NAMETAGS, EFFECTS }
     private record NametagPreset(String id, String format, String name, double price) {}
 
     // Fixed layout slots for Skins tab
@@ -45,10 +48,12 @@ public class CustomizationGui implements GuiHolder, ShopBound {
     private final Inventory inv;
 
     private final List<NametagPreset> allNametags = new ArrayList<>();
+    private final List<EffectDefinition> allEffects = new ArrayList<>();
     private final Map<Integer, Skins.Skin> skinBySlot = new HashMap<>();
 
     private final boolean skinsEnabled;
     private final boolean tagsEnabled;
+    private final boolean effectsEnabled;
 
     private Tab currentTab = Tab.SKINS;
     private int page = 0;
@@ -62,10 +67,13 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         this.skinsEnabled = plugin.getConfig().getBoolean("customization.skins-enabled", true);
         this.tagsEnabled = plugin.getConfig().getBoolean("customization.nametags-enabled", true);
 
-        if (!skinsEnabled && tagsEnabled) this.currentTab = Tab.NAMETAGS;
+        this.effectsEnabled = plugin.getConfig().getBoolean("customization.effects-enabled", true);
+
+        if (!skinsEnabled) this.currentTab = tagsEnabled ? Tab.NAMETAGS : (effectsEnabled ? Tab.EFFECTS : Tab.SKINS);
 
         loadSkinsMapping();
         loadNametagsFromFile();
+        if (effectsEnabled) allEffects.addAll(plugin.getEffectManager().getRegistry().all());
 
         this.inv = Bukkit.createInventory(this, 54, Text.mm("<dark_gray>Shop Customization"));
         render();
@@ -102,12 +110,17 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
         // Render Tabs
         if (skinsEnabled) {
-            inv.setItem(3, Text.icon(Material.LEATHER_CHESTPLATE,
+            inv.setItem(2, Text.icon(Material.LEATHER_CHESTPLATE,
                     currentTab == Tab.SKINS ? "<green>▶ Skins" : "<gray>Skins", "<yellow>Click to view outfit upgrades"));
         }
         if (tagsEnabled) {
-            inv.setItem(5, Text.icon(Material.NAME_TAG,
+            inv.setItem(4, Text.icon(Material.NAME_TAG,
                     currentTab == Tab.NAMETAGS ? "<green>▶ Nametags" : "<gray>Nametags", "<yellow>Click to view hologram upgrades"));
+        }
+
+        if (effectsEnabled) {
+            inv.setItem(6, Text.icon(Material.BLAZE_POWDER,
+                    currentTab == Tab.EFFECTS ? "<green>▶ Effects" : "<gray>Effects", "<yellow>Click to view particle upgrades"));
         }
 
         if (currentTab == Tab.SKINS && skinsEnabled) {
@@ -158,17 +171,124 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                 inv.setItem(slot, it);
             }
 
-            // Pagination Controls
-            if (page > 0) {
-                inv.setItem(48, Text.icon(Material.ARROW, "<yellow>Previous Page", "<gray>Page " + page + " / " + maxPages));
-            }
-            if (page < maxPages - 1) {
-                inv.setItem(50, Text.icon(Material.ARROW, "<yellow>Next Page", "<gray>Page " + (page + 2) + " / " + maxPages));
-            }
+            renderPagination(maxPages);
         }
+
+        if (currentTab == Tab.EFFECTS && effectsEnabled) renderEffects(sm, p);
 
         inv.setItem(49, Text.icon(Material.OAK_DOOR, "<red>Back"));
         fillEmptySlots();
+    }
+
+    private void renderPagination(int maxPages) {
+        if (page > 0) {
+            inv.setItem(48, Text.icon(Material.ARROW, "<yellow>Previous Page", "<gray>Page " + page + " / " + maxPages));
+        }
+        if (page < maxPages - 1) {
+            inv.setItem(50, Text.icon(Material.ARROW, "<yellow>Next Page", "<gray>Page " + (page + 2) + " / " + maxPages));
+        }
+    }
+
+    private void renderEffects(ShopManager sm, PlayerProfile p) {
+        int maxPages = Math.max(1, (int) Math.ceil((double) allEffects.size() / PAGE_SIZE));
+        if (page >= maxPages) page = maxPages - 1;
+        int start = page * PAGE_SIZE;
+        int end = Math.min(start + PAGE_SIZE, allEffects.size());
+
+        for (int i = start; i < end; i++) {
+            EffectDefinition def = allEffects.get(i);
+            ItemStack it = new ItemStack(def.icon());
+            ItemMeta meta = it.getItemMeta();
+            meta.displayName(Text.item(def.name()));
+            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+
+            List<Component> lore = new ArrayList<>();
+            for (String line : def.description()) lore.add(Text.item("<gray>" + line));
+            if (!def.description().isEmpty()) lore.add(Component.empty());
+            lore.add(Text.item("<gray>Price: <white>" + (def.price() <= 0 ? "Free" : sm.money(def.price()))));
+            lore.add(Component.empty());
+
+            boolean owned = def.price() <= 0 || p.ownsEffect(def.id());
+            if (!def.permission().isEmpty() && !player.hasPermission(def.permission())) {
+                lore.add(Text.item("<red>✘ Locked (missing permission)"));
+            } else if (def.id().equals(p.getEquippedEffect())) {
+                lore.add(Text.item("<green>✔ Currently Equipped"));
+                meta.setEnchantmentGlintOverride(true);
+            } else if (owned) {
+                lore.add(Text.item("<yellow>Click to equip!"));
+            } else if (def.id().equals(confirming)) {
+                lore.add(Text.item("<yellow>Click again to confirm purchase!"));
+            } else {
+                lore.add(Text.item("<yellow>Click to purchase."));
+            }
+            lore.add(Text.item("<dark_gray>Right-click to preview"));
+
+            meta.lore(lore);
+            it.setItemMeta(meta);
+            inv.setItem(CONTENT_SLOTS[i - start], it);
+        }
+
+        inv.setItem(45, Text.icon(Material.BARRIER, "<red>Remove Effect", "<gray>Disable particles on this shop"));
+        renderPagination(maxPages);
+    }
+
+    private void equipEffect(PlayerProfile p, String id) {
+        p.setEquippedEffect(id);
+        plugin.getEffectManager().set(shop.getId(), id);
+        plugin.getDatabaseManager().async(() ->
+                plugin.getDatabaseManager().updateEffectData(player.getUniqueId().toString(),
+                        p.getUnlockedEffectsString(), p.getEquippedEffect()));
+    }
+
+    private void handleEffectClick(InventoryClickEvent e, int slot) {
+        PlayerProfile p = plugin.getShopManager().getProfile(player.getUniqueId());
+
+        if (slot == 45) {
+            if (!p.getEquippedEffect().isEmpty()) equipEffect(p, "");
+            confirming = null;
+            render();
+            return;
+        }
+
+        int idx = -1;
+        for (int i = 0; i < CONTENT_SLOTS.length; i++) {
+            if (CONTENT_SLOTS[i] == slot) { idx = page * PAGE_SIZE + i; break; }
+        }
+        if (idx < 0 || idx >= allEffects.size()) return;
+        EffectDefinition def = allEffects.get(idx);
+
+        if (e.isRightClick()) {
+            int secs = plugin.getEffectManager().getRegistry().previewSeconds();
+            if (plugin.getEffectManager().preview(shop.getId(), def.id(), secs, p.getEquippedEffect())) {
+                player.sendMessage(Text.mm("<gray>Previewing </gray>" + def.name() + "<gray> for " + secs + " seconds..."));
+                Bukkit.getScheduler().runTask(plugin, () -> player.closeInventory());
+            }
+            return;
+        }
+
+        if (!def.permission().isEmpty() && !player.hasPermission(def.permission())) {
+            player.sendMessage(Text.mm("<red>You don't have access to this effect."));
+            return;
+        }
+        if (def.id().equals(p.getEquippedEffect())) return;
+
+        if (def.price() <= 0 || p.ownsEffect(def.id())) {
+            equipEffect(p, def.id());
+            confirming = null;
+        } else if (def.id().equals(confirming)) {
+            if (plugin.getEconomy().has(player, def.price())) {
+                plugin.getEconomy().withdrawPlayer(player, def.price());
+                p.unlockEffect(def.id());
+                equipEffect(p, def.id());
+                player.sendMessage(Text.mm("<green>Purchased and applied: </green>" + def.name()));
+            } else {
+                player.sendMessage(Text.mm("<red>You don't have enough money!"));
+            }
+            confirming = null;
+        } else {
+            confirming = def.id();
+        }
+        render();
     }
 
     private ItemStack renderSkinItem(ShopManager sm, PlayerProfile p, Skins.Skin s) {
@@ -198,16 +318,21 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             return;
         }
 
-        if (slot == 3 && skinsEnabled) { currentTab = Tab.SKINS; page = 0; confirming = null; render(); return; }
-        if (slot == 5 && tagsEnabled) { currentTab = Tab.NAMETAGS; page = 0; confirming = null; render(); return; }
+        if (slot == 2 && skinsEnabled) { currentTab = Tab.SKINS; page = 0; confirming = null; render(); return; }
+        if (slot == 4 && tagsEnabled) { currentTab = Tab.NAMETAGS; page = 0; confirming = null; render(); return; }
+        if (slot == 6 && effectsEnabled) { currentTab = Tab.EFFECTS; page = 0; confirming = null; render(); return; }
 
         // Pagination Clicks
-        if (currentTab == Tab.NAMETAGS && tagsEnabled) {
+        if ((currentTab == Tab.NAMETAGS && tagsEnabled) || (currentTab == Tab.EFFECTS && effectsEnabled)) {
+            int total = currentTab == Tab.NAMETAGS ? allNametags.size() : allEffects.size();
+            int maxPages = Math.max(1, (int) Math.ceil((double) total / PAGE_SIZE));
             if (slot == 48 && page > 0) { page--; confirming = null; render(); return; }
-            if (slot == 50) {
-                int maxPages = (int) Math.ceil((double) allNametags.size() / PAGE_SIZE);
-                if (page < maxPages - 1) { page++; confirming = null; render(); return; }
-            }
+            if (slot == 50 && page < maxPages - 1) { page++; confirming = null; render(); return; }
+        }
+
+        if (currentTab == Tab.EFFECTS && effectsEnabled) {
+            handleEffectClick(e, slot);
+            return;
         }
 
         if (currentTab == Tab.NAMETAGS && tagsEnabled) {

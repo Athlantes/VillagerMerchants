@@ -270,6 +270,7 @@ public class ShopManager {
         v.setCustomNameVisible(false);
 
         plugin.getNametagManager().removeNametag(v.getUniqueId());
+        plugin.getEffectManager().clear(v.getUniqueId());
 
         if (s == null) {
             Skins.apply(v, "plains", "none");
@@ -286,6 +287,7 @@ public class ShopManager {
                 personalizedFormat = personalizedFormat.replace("Available Shop", "Shop");
 
                 plugin.getNametagManager().spawnNametag(v, personalizedFormat + rating);
+                plugin.getEffectManager().set(v, pr.getEquippedEffect());
             } else {
                 plugin.getNametagManager().spawnNametag(v, "<gray>Closed Shop</gray>");
             }

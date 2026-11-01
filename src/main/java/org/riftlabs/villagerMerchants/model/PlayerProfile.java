@@ -19,6 +19,10 @@ public class PlayerProfile {
     private final Set<String> unlockedNametags = new HashSet<>();
     private String equippedNametagFormat = "<green><bold>Available Shop</bold></green>";
 
+    // Effect (particle) Customization State
+    private final Set<String> unlockedEffects = new HashSet<>();
+    private String equippedEffect = "";
+
     public PlayerProfile(UUID uuid, int unlockedSlots, int taxLevel, int maxRentDays) {
         this.uuid = uuid;
         this.unlockedSlots = unlockedSlots;
@@ -59,6 +63,21 @@ public class PlayerProfile {
     public String getUnlockedNametagsString() { return String.join(",", unlockedNametags); }
     public String getEquippedNametagFormat() { return equippedNametagFormat; }
     public void setEquippedNametagFormat(String format) { this.equippedNametagFormat = format; }
+
+    // Effect Methods
+    public boolean ownsEffect(String id) { return unlockedEffects.contains(id); }
+    public void unlockEffect(String id) { unlockedEffects.add(id); }
+    public String getUnlockedEffectsString() { return String.join(",", unlockedEffects); }
+    public String getEquippedEffect() { return equippedEffect; }
+    public void setEquippedEffect(String id) { this.equippedEffect = id == null ? "" : id; }
+
+    public void loadEffects(String unlocked, String equipped) {
+        unlockedEffects.clear();
+        if (unlocked != null && !unlocked.isBlank()) {
+            for (String s : unlocked.split(",")) if (!s.isBlank()) unlockedEffects.add(s.trim());
+        }
+        equippedEffect = equipped == null ? "" : equipped.trim();
+    }
 
     public void loadNametags(String nametagsString) {
         unlockedNametags.clear();

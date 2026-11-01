@@ -79,3 +79,4 @@ ratings:
 customization:
   skins-enabled: true
   nametags-enabled: true
+  effects-enabled: true       # particle effects tab (configured in effects.yml)

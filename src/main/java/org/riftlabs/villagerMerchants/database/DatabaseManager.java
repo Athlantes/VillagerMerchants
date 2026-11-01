@@ -56,7 +56,9 @@ public class DatabaseManager {
                 + "tax_reduction_level INTEGER DEFAULT 0, "
                 + "max_rent_duration INTEGER DEFAULT 7, "
                 + "unlocked_nametags TEXT, "
-                + "nametag_format VARCHAR(255) DEFAULT '<green><bold>Available Shop</bold></green>'"
+                + "nametag_format VARCHAR(255) DEFAULT '<green><bold>Available Shop</bold></green>', "
+                + "unlocked_effects TEXT, "
+                + "equipped_effect VARCHAR(64) DEFAULT ''"
                 + ");";
         String shops = "CREATE TABLE IF NOT EXISTS shops ("
                 + "shop_id VARCHAR(36) PRIMARY KEY, "
@@ -106,7 +108,8 @@ public class DatabaseManager {
             // Migrations for existing databases
             for (String col : new String[]{
                     "unlocked_skins TEXT", "skin_type TEXT", "skin_profession TEXT", "slots_level INTEGER",
-                    "unlocked_nametags TEXT", "nametag_format VARCHAR(255) DEFAULT '<green><bold>Available Shop</bold></green>'"}) {
+                    "unlocked_nametags TEXT", "nametag_format VARCHAR(255) DEFAULT '<green><bold>Available Shop</bold></green>'",
+                    "unlocked_effects TEXT", "equipped_effect VARCHAR(64) DEFAULT ''"}) {
                 try { s.execute("ALTER TABLE player_profiles ADD COLUMN " + col); } catch (SQLException ignored) {}
             }
             try { s.execute("ALTER TABLE shops ADD COLUMN trade_prices TEXT"); } catch (SQLException ignored) {}
@@ -141,7 +144,7 @@ public class DatabaseManager {
 
     public Map<UUID, PlayerProfile> loadProfiles() {
         Map<UUID, PlayerProfile> map = new HashMap<>();
-        String q = "SELECT uuid, unlocked_slots, tax_reduction_level, max_rent_duration, unlocked_skins, skin_type, skin_profession, slots_level, unlocked_nametags, nametag_format FROM player_profiles";
+        String q = "SELECT uuid, unlocked_slots, tax_reduction_level, max_rent_duration, unlocked_skins, skin_type, skin_profession, slots_level, unlocked_nametags, nametag_format, unlocked_effects, equipped_effect FROM player_profiles";
         try (Connection c = getConnection(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(q)) {
             while (rs.next()) {
                 try {
@@ -155,6 +158,9 @@ public class DatabaseManager {
                     // Load Nametags
                     pp.loadNametags(rs.getString(9));
                     if (rs.getString(10) != null) pp.setEquippedNametagFormat(rs.getString(10));
+
+                    // Load Effects
+                    pp.loadEffects(rs.getString(11), rs.getString(12));
 
                     map.put(u, pp);
                 } catch (IllegalArgumentException ignored) {}
@@ -267,6 +273,18 @@ public class DatabaseManager {
             ps.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to save nametag data for " + uuid + ": " + e.getMessage());
+        }
+    }
+
+    public void updateEffectData(String uuid, String unlockedEffects, String equipped) {
+        String q = "UPDATE player_profiles SET unlocked_effects = ?, equipped_effect = ? WHERE uuid = ?";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
+            ps.setString(1, unlockedEffects);
+            ps.setString(2, equipped);
+            ps.setString(3, uuid);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to save effect data for " + uuid + ": " + e.getMessage());
         }
     }
 

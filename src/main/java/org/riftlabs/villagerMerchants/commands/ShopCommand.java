@@ -40,7 +40,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.mm("<gold>/vm sales | purchases [page] <gray>- your transaction log"));
             sender.sendMessage(Text.mm("<gold>/vm rate <1-5> <gray>- rate the shop you last bought from"));
             if (sender.hasPermission("villagermerchants.admin"))
-                sender.sendMessage(Text.mm("<gold>/vm create | remove | reload | log <player> [page] <gray>(admin)"));
+                sender.sendMessage(Text.mm("<gold>/vm create | remove | reload | effect | log <player> [page] <gray>(admin)"));
             return true;
         }
         String sub = args[0].toLowerCase();
@@ -76,7 +76,8 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         switch (sub) {
             case "reload" -> {
                 plugin.reloadConfig();
-                sender.sendMessage(Text.mm("<green>Config reloaded."));
+                plugin.getEffectManager().reload();
+                sender.sendMessage(Text.mm("<green>Config and effects reloaded."));
             }
             case "create" -> {
                 if (!(sender instanceof Player p)) { sender.sendMessage("Players only."); return true; }
@@ -119,9 +120,36 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
 
                 for (Entity passenger : v.getPassengers()) passenger.remove();
                 plugin.getNametagManager().removeNametag(v.getUniqueId());
+                plugin.getEffectManager().clear(v.getUniqueId());
 
                 v.remove();
                 p.sendMessage(Text.mm("<green>Shop NPC removed" + (s != null ? " (owner's items moved to /vm claim)." : ".")));
+            }
+            case "effect" -> {
+                var fx = plugin.getEffectManager();
+                String act = args.length > 1 ? args[1].toLowerCase() : "list";
+                if (act.equals("list")) {
+                    sender.sendMessage(Text.mm("<gold>Effects: <white>" + String.join("<gray>, <white>",
+                            fx.getRegistry().all().stream().map(d -> d.id()).toList())));
+                    sender.sendMessage(Text.mm("<gray>/vm effect test <id> [seconds] | off  <dark_gray>(look at a shop NPC)"));
+                    return true;
+                }
+                if (!(sender instanceof Player p)) { sender.sendMessage("Players only."); return true; }
+                Villager v = findLookedShopNpc(p);
+                if (v == null) { p.sendMessage(Text.mm("<red>Look at a shop NPC (within 6 blocks).")); return true; }
+                if (act.equals("off")) {
+                    plugin.getShopManager().refreshNameTag(v);   // back to whatever the owner has equipped
+                    p.sendMessage(Text.mm("<green>Test effect stopped."));
+                } else if (act.equals("test") && args.length > 2) {
+                    int secs = fx.getRegistry().previewSeconds();
+                    if (args.length > 3) { try { secs = Math.max(1, Integer.parseInt(args[3])); } catch (NumberFormatException ignored) {} }
+                    Shop s = plugin.getShopManager().getShop(v.getUniqueId());
+                    String back = s == null ? "" : plugin.getShopManager().getProfile(s.getOwner()).getEquippedEffect();
+                    if (fx.preview(v.getUniqueId(), args[2], secs, back)) p.sendMessage(Text.mm("<green>Playing <white>" + args[2] + "<green> for " + secs + "s."));
+                    else p.sendMessage(Text.mm("<red>Unknown effect. Use /vm effect list."));
+                } else {
+                    p.sendMessage(Text.mm("<red>Usage: /vm effect list | test <id> [seconds] | off"));
+                }
             }
             case "log" -> {
                 if (args.length < 2) { sender.sendMessage(Text.mm("<red>Usage: /vm log <player> [page]")); return true; }
@@ -186,9 +214,18 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             for (Player pl : Bukkit.getOnlinePlayers()) if (pl.getName().toLowerCase().startsWith(args[1].toLowerCase())) out.add(pl.getName());
             return out;
         }
+        if (sender.hasPermission("villagermerchants.admin") && args.length >= 2 && args[0].equalsIgnoreCase("effect")) {
+            if (args.length == 2) {
+                for (String o : List.of("list", "test", "off")) if (o.startsWith(args[1].toLowerCase())) out.add(o);
+            } else if (args.length == 3 && args[1].equalsIgnoreCase("test")) {
+                for (var d : plugin.getEffectManager().getRegistry().all())
+                    if (d.id().startsWith(args[2].toLowerCase())) out.add(d.id());
+            }
+            return out;
+        }
         if (args.length != 1) return out;
         List<String> opts = new ArrayList<>(List.of("claim", "shops", "sales", "purchases", "rate"));
-        if (sender.hasPermission("villagermerchants.admin")) opts.addAll(List.of("create", "remove", "reload", "log"));
+        if (sender.hasPermission("villagermerchants.admin")) opts.addAll(List.of("create", "remove", "reload", "effect", "log"));
         for (String o : opts) if (o.startsWith(args[0].toLowerCase())) out.add(o);
         return out;
     }

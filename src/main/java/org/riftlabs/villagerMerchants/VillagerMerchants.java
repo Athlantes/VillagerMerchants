@@ -14,6 +14,7 @@ import org.riftlabs.villagerMerchants.listeners.JoinListener;
 import org.riftlabs.villagerMerchants.listeners.NpcLookTask;
 import org.riftlabs.villagerMerchants.listeners.PricePromptListener;
 import org.riftlabs.villagerMerchants.listeners.ShopInteractListener;
+import org.riftlabs.villagerMerchants.manager.EffectManager;
 import org.riftlabs.villagerMerchants.manager.NametagManager;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
@@ -30,6 +31,7 @@ public final class VillagerMerchants extends JavaPlugin {
     private RatingManager ratings;
     private TeleportManager teleports;
     private NametagManager nametagManager;
+    private EffectManager effectManager;
     private CustomerTradeListener customerTrades;
     private PricePromptListener prompts;
     private Economy econ;
@@ -57,6 +59,7 @@ public final class VillagerMerchants extends JavaPlugin {
 
         // Critical: Initialize managers BEFORE loading data
         nametagManager = new NametagManager(this);
+        effectManager = new EffectManager(this);
         shopManager = new ShopManager(this, databaseManager);
 
         shopManager.load();
@@ -90,6 +93,7 @@ public final class VillagerMerchants extends JavaPlugin {
     @Override
     public void onDisable() {
         if (nametagManager != null) nametagManager.cleanup();
+        if (effectManager != null) effectManager.cleanup();
         if (shopManager != null) {
             shopManager.saveAll();
             shopManager.despawnAll(); // Deletes all physical NPCs from the world to prevent chunk saving
@@ -128,6 +132,7 @@ public final class VillagerMerchants extends JavaPlugin {
     public RatingManager getRatings() { return ratings; }
     public TeleportManager getTeleports() { return teleports; }
     public NametagManager getNametagManager() { return nametagManager; }
+    public EffectManager getEffectManager() { return effectManager; }
     public CustomerTradeListener getCustomerTrades() { return customerTrades; }
     public PricePromptListener getPrompts() { return prompts; }
 }
