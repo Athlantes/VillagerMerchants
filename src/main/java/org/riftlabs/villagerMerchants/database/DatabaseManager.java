@@ -11,20 +11,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
-/**
- * SQLite storage. Reads happen once at startup (and for claims / history); all work that
- * touches the database after startup goes through a single-thread executor so it stays
- * ordered and never blocks the main thread.
- */
 public class DatabaseManager {
     public record ShopRow(String id, String owner, String location, long expiry, String trades, String stock, String prices) {}
     public record ClaimRow(int id, String data) {}
-
-    /** One logged sale. A shift-click that buys several times is one row with trades = N. */
     public record TxRow(long id, long ts, String shopId, String seller, String buyer, String buyerName,
                         String kind, String itemType, String itemName, int itemQty, int trades,
                         double money, String paySummary) {}
-    /** rows = log entries, sales = individual trade executions, money = total paid. */
     public record Totals(long rows, long sales, double money) {}
     public record Unread(long rows, long sales, double money, long maxId, List<TxRow> recent) {}
     public record RatingAgg(String shopId, String owner, double sum, int count) {}
@@ -62,7 +54,10 @@ public class DatabaseManager {
                 + "uuid VARCHAR(36) PRIMARY KEY, "
                 + "unlocked_slots INTEGER DEFAULT 1, "
                 + "tax_reduction_level INTEGER DEFAULT 0, "
-                + "max_rent_duration INTEGER DEFAULT 7);";
+                + "max_rent_duration INTEGER DEFAULT 7, "
+                + "unlocked_nametags TEXT, "
+                + "nametag_format VARCHAR(255) DEFAULT '<green><bold>Available Shop</bold></green>'"
+                + ");";
         String shops = "CREATE TABLE IF NOT EXISTS shops ("
                 + "shop_id VARCHAR(36) PRIMARY KEY, "
                 + "owner_uuid VARCHAR(36), "
@@ -74,7 +69,6 @@ public class DatabaseManager {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "owner_uuid VARCHAR(36), "
                 + "data TEXT);";
-        // Transaction log. Also the data source for sale notifications ("notified") and the web dashboard.
         String transactions = "CREATE TABLE IF NOT EXISTS transactions ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "ts INTEGER NOT NULL, "
@@ -108,8 +102,11 @@ public class DatabaseManager {
             s.execute("CREATE INDEX IF NOT EXISTS idx_tx_buyer ON transactions (buyer_uuid, ts);");
             s.execute("CREATE INDEX IF NOT EXISTS idx_tx_shop ON transactions (shop_id, seller_uuid, ts);");
             s.execute("CREATE INDEX IF NOT EXISTS idx_tx_unread ON transactions (seller_uuid, notified);");
-            // migrations for databases created by older versions
-            for (String col : new String[]{"unlocked_skins TEXT", "skin_type TEXT", "skin_profession TEXT", "slots_level INTEGER"}) {
+
+            // Migrations for existing databases
+            for (String col : new String[]{
+                    "unlocked_skins TEXT", "skin_type TEXT", "skin_profession TEXT", "slots_level INTEGER",
+                    "unlocked_nametags TEXT", "nametag_format VARCHAR(255) DEFAULT '<green><bold>Available Shop</bold></green>'"}) {
                 try { s.execute("ALTER TABLE player_profiles ADD COLUMN " + col); } catch (SQLException ignored) {}
             }
             try { s.execute("ALTER TABLE shops ADD COLUMN trade_prices TEXT"); } catch (SQLException ignored) {}
@@ -118,7 +115,6 @@ public class DatabaseManager {
         }
     }
 
-    /** Queue work. Falls back to running inline if the executor is already shut down. */
     public void async(Runnable r) {
         Runnable safe = () -> {
             try { r.run(); } catch (Throwable t) {
@@ -127,8 +123,6 @@ public class DatabaseManager {
         };
         try { executor.execute(safe); } catch (RejectedExecutionException ex) { safe.run(); }
     }
-
-    // ---- loading ----
 
     public List<ShopRow> loadShops() {
         List<ShopRow> rows = new ArrayList<>();
@@ -147,7 +141,7 @@ public class DatabaseManager {
 
     public Map<UUID, PlayerProfile> loadProfiles() {
         Map<UUID, PlayerProfile> map = new HashMap<>();
-        String q = "SELECT uuid, unlocked_slots, tax_reduction_level, max_rent_duration, unlocked_skins, skin_type, skin_profession, slots_level FROM player_profiles";
+        String q = "SELECT uuid, unlocked_slots, tax_reduction_level, max_rent_duration, unlocked_skins, skin_type, skin_profession, slots_level, unlocked_nametags, nametag_format FROM player_profiles";
         try (Connection c = getConnection(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(q)) {
             while (rs.next()) {
                 try {
@@ -155,9 +149,13 @@ public class DatabaseManager {
                     PlayerProfile pp = new PlayerProfile(u, rs.getInt(2), rs.getInt(3), rs.getInt(4));
                     pp.loadSkins(rs.getString(5), rs.getString(6), rs.getString(7));
                     int sl = rs.getInt(8);
-                    // legacy rows (no level stored): the old default was 1 slot, so extra slots = bought levels
                     if (rs.wasNull()) sl = Math.max(0, rs.getInt(2) - 1);
                     pp.setSlotLevel(sl);
+
+                    // Load Nametags
+                    pp.loadNametags(rs.getString(9));
+                    if (rs.getString(10) != null) pp.setEquippedNametagFormat(rs.getString(10));
+
                     map.put(u, pp);
                 } catch (IllegalArgumentException ignored) {}
             }
@@ -181,7 +179,6 @@ public class DatabaseManager {
         return rows;
     }
 
-    /** Startup: lifetime trade executions per (shop, seller), for the directory's popularity sort. */
     public List<SalesCount> loadSalesCounts() {
         List<SalesCount> out = new ArrayList<>();
         String q = "SELECT shop_id, seller_uuid, COALESCE(SUM(trades), 0) FROM transactions GROUP BY shop_id, seller_uuid";
@@ -193,7 +190,6 @@ public class DatabaseManager {
         return out;
     }
 
-    /** Startup: rating sums per (shop, owner). */
     public List<RatingAgg> loadRatingAggs() {
         List<RatingAgg> out = new ArrayList<>();
         String q = "SELECT shop_id, owner_uuid, SUM(stars), COUNT(*) FROM shop_ratings GROUP BY shop_id, owner_uuid";
@@ -205,11 +201,8 @@ public class DatabaseManager {
         return out;
     }
 
-    // ---- writes (call inside async()) ----
-
     public void upsertShop(ShopRow r) {
-        String q = "INSERT OR REPLACE INTO shops (shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String q = "INSERT OR REPLACE INTO shops (shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
             ps.setString(1, r.id());
             ps.setString(2, r.owner());
@@ -233,20 +226,47 @@ public class DatabaseManager {
         }
     }
 
+    // Keeps backwards compatibility with your existing ShopManager
     public void upsertProfile(String uuid, int slots, int tax, int days, String skins, String skinType, String skinProf, int slotLevel) {
-        String q = "INSERT OR REPLACE INTO player_profiles (uuid, unlocked_slots, tax_reduction_level, max_rent_duration, unlocked_skins, skin_type, skin_profession, slots_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        String q = "UPDATE player_profiles SET unlocked_slots=?, tax_reduction_level=?, max_rent_duration=?, unlocked_skins=?, skin_type=?, skin_profession=?, slots_level=? WHERE uuid=?";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
-            ps.setString(1, uuid);
-            ps.setInt(2, slots);
-            ps.setInt(3, tax);
-            ps.setInt(4, days);
-            ps.setString(5, skins);
-            ps.setString(6, skinType);
-            ps.setString(7, skinProf);
-            ps.setInt(8, slotLevel);
-            ps.executeUpdate();
+            ps.setInt(1, slots);
+            ps.setInt(2, tax);
+            ps.setInt(3, days);
+            ps.setString(4, skins);
+            ps.setString(5, skinType);
+            ps.setString(6, skinProf);
+            ps.setInt(7, slotLevel);
+            ps.setString(8, uuid);
+            if (ps.executeUpdate() == 0) {
+                // Insert new row if it didn't exist
+                String iq = "INSERT INTO player_profiles (uuid, unlocked_slots, tax_reduction_level, max_rent_duration, unlocked_skins, skin_type, skin_profession, slots_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement ips = c.prepareStatement(iq)) {
+                    ips.setString(1, uuid);
+                    ips.setInt(2, slots);
+                    ips.setInt(3, tax);
+                    ips.setInt(4, days);
+                    ips.setString(5, skins);
+                    ips.setString(6, skinType);
+                    ips.setString(7, skinProf);
+                    ips.setInt(8, slotLevel);
+                    ips.executeUpdate();
+                }
+            }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to save profile " + uuid + ": " + e.getMessage());
+        }
+    }
+
+    public void updateNametagData(String uuid, String unlockedNametags, String format) {
+        String q = "UPDATE player_profiles SET unlocked_nametags = ?, nametag_format = ? WHERE uuid = ?";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
+            ps.setString(1, unlockedNametags);
+            ps.setString(2, format);
+            ps.setString(3, uuid);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to save nametag data for " + uuid + ": " + e.getMessage());
         }
     }
 
@@ -269,9 +289,6 @@ public class DatabaseManager {
         }
     }
 
-    // ---- transaction log (call inside async()) ----
-
-    /** @param notified true when the seller was online and already saw the sale message. */
     public void insertTransaction(TxRow r, boolean notified) {
         String q = "INSERT INTO transactions (ts, shop_id, seller_uuid, buyer_uuid, buyer_name, kind, item_type, "
                 + "item_name, item_qty, trades, money, pay_summary, notified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -303,7 +320,6 @@ public class DatabaseManager {
         };
     }
 
-    /** Binds the subject uuid for where(mode); returns the last parameter index used. */
     private static int bind(PreparedStatement ps, TxMode m, String uuid) throws SQLException {
         ps.setString(1, uuid);
         if (m == TxMode.BOTH) { ps.setString(2, uuid); return 2; }
@@ -345,7 +361,6 @@ public class DatabaseManager {
         return new Totals(0, 0, 0);
     }
 
-    /** Sales of one shop (while owned by this seller) since the given epoch-millis (0 = all time). */
     public Totals shopTotals(String shopId, String seller, long since) {
         String q = "SELECT COUNT(*), COALESCE(SUM(trades), 0), COALESCE(SUM(money), 0) FROM transactions "
                 + "WHERE shop_id = ? AND seller_uuid = ? AND ts >= ?";
@@ -362,7 +377,6 @@ public class DatabaseManager {
         return new Totals(0, 0, 0);
     }
 
-    /** Sales the seller has not been told about yet. Reads them AND marks them as seen. */
     public Unread takeUnread(String seller, int maxLines) {
         Unread none = new Unread(0, 0, 0, 0, List.of());
         try (Connection c = getConnection()) {
@@ -417,9 +431,6 @@ public class DatabaseManager {
         }
     }
 
-    // ---- ratings (call inside async()) ----
-
-    /** True if this buyer has bought from this shop while it was owned by this seller. */
     public boolean hasPurchased(String shopId, String seller, String buyer) {
         String q = "SELECT 1 FROM transactions WHERE shop_id = ? AND seller_uuid = ? AND buyer_uuid = ? LIMIT 1";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
@@ -433,7 +444,6 @@ public class DatabaseManager {
         }
     }
 
-    /** @return the rater's current stars for this shop/owner, or 0 if they haven't rated. */
     public int getRating(String shopId, String owner, String rater) {
         String q = "SELECT stars FROM shop_ratings WHERE shop_id = ? AND owner_uuid = ? AND rater_uuid = ?";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
@@ -475,7 +485,6 @@ public class DatabaseManager {
         return new RatingAgg(shopId, owner, 0, 0);
     }
 
-    /** Flushes queued writes. Call from onDisable. */
     public void disconnect() {
         executor.shutdown();
         try {

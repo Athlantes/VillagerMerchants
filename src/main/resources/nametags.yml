@@ -1,0 +1,120 @@
+classic_green:
+  name: "Classic Green"
+  format: "<green><bold>Available Shop</bold></green>"
+  price: 0.0
+aqua_trade:
+  name: "Aqua Trade"
+  format: "<aqua><bold>Trade Post</bold></aqua>"
+  price: 1000.0
+general_yellow:
+  name: "General Yellow"
+  format: "<yellow><bold>General Store</bold></yellow>"
+  price: 1000.0
+blue_merchant:
+  name: "Blue Merchant"
+  format: "<blue><bold>Merchant</bold></blue>"
+  price: 2000.0
+purple_boutique:
+  name: "Purple Boutique"
+  format: "<light_purple><bold>Boutique</bold></light_purple>"
+  price: 2000.0
+golden_market:
+  name: "Golden Market"
+  format: "<gold><bold>Premium Market</bold></gold>"
+  price: 5000.0
+red_market:
+  name: "Red Market"
+  format: "<red><bold>Red Market</bold></red>"
+  price: 5000.0
+shady_dealer:
+  name: "Shady Dealer"
+  format: "<dark_gray><bold>Shady Dealer</bold></dark_gray>"
+  price: 5000.0
+clean_white:
+  name: "Clean White"
+  format: "<white><bold>Clean Goods</bold></white>"
+  price: 5000.0
+emerald_exchange:
+  name: "Emerald Exchange"
+  format: "<gradient:green:dark_green><bold>Emerald Exchange</bold></gradient>"
+  price: 10000.0
+oceanic_trades:
+  name: "Oceanic Trades"
+  format: "<gradient:aqua:blue><bold>Oceanic Trades</bold></gradient>"
+  price: 10000.0
+blazing_offers:
+  name: "Blazing Offers"
+  format: "<gradient:red:gold><bold>Blazing Offers</bold></gradient>"
+  price: 12500.0
+mystic_wares:
+  name: "Mystic Wares"
+  format: "<gradient:light_purple:dark_purple><bold>Mystic Wares</bold></gradient>"
+  price: 12500.0
+silver_standard:
+  name: "Silver Standard"
+  format: "<gradient:gray:white><bold>Silver Standard</bold></gradient>"
+  price: 15000.0
+golden_vault:
+  name: "Golden Vault"
+  format: "<gradient:yellow:gold><bold>Golden Vault</bold></gradient>"
+  price: 15000.0
+crimson_market:
+  name: "Crimson Market"
+  format: "<gradient:dark_red:red><bold>Crimson Market</bold></gradient>"
+  price: 15000.0
+deep_sea_shop:
+  name: "Deep Sea Shop"
+  format: "<gradient:blue:dark_blue><bold>Deep Sea Shop</bold></gradient>"
+  price: 15000.0
+dark_alley:
+  name: "Dark Alley"
+  format: "<gradient:gray:black><bold>Dark Alley</bold></gradient>"
+  price: 15000.0
+diamond_boutique:
+  name: "Diamond Boutique"
+  format: "<gradient:aqua:white:aqua><bold>Diamond Boutique</bold></gradient>"
+  price: 20000.0
+sunset_goods:
+  name: "Sunset Goods"
+  format: "<gradient:red:gold:yellow><bold>Sunset Goods</bold></gradient>"
+  price: 20000.0
+amethyst_store:
+  name: "Amethyst Store"
+  format: "<gradient:dark_purple:light_purple:dark_purple><bold>Amethyst Store</bold></gradient>"
+  price: 25000.0
+underground_smith:
+  name: "Underground Smith"
+  format: "<gradient:black:dark_gray:black><bold>Underground Smith</bold></gradient>"
+  price: 25000.0
+royal_treasury:
+  name: "Royal Treasury"
+  format: "<gradient:gold:white:gold><bold>Royal Treasury</bold></gradient>"
+  price: 30000.0
+tropical_trader:
+  name: "Tropical Trader"
+  format: "<gradient:green:yellow:red><bold>Tropical Trader</bold></gradient>"
+  price: 30000.0
+animated_rainbow:
+  name: "Animated Rainbow"
+  format: "<anim_rainbow><bold>Super Store</bold></anim_rainbow>"
+  price: 40000.0
+prismatic_wares:
+  name: "Prismatic Bold"
+  format: "<anim_rainbow><bold>Prismatic Wares</bold></anim_rainbow>"
+  price: 50000.0
+black_market:
+  name: "Black Market"
+  format: "<dark_purple><obfuscated>A</obfuscated> <bold>Black Market</bold> <obfuscated>A</obfuscated></dark_purple>"
+  price: 75000.0
+the_matrix:
+  name: "The Matrix"
+  format: "<dark_green><obfuscated>||</obfuscated> <bold>The Matrix</bold> <obfuscated>||</obfuscated></dark_green>"
+  price: 75000.0
+chaos_outpost:
+  name: "Chaos Outpost"
+  format: "<gradient:gold:red><obfuscated>O</obfuscated> <bold>Chaos Outpost</bold> <obfuscated>O</obfuscated></gradient>"
+  price: 85000.0
+ultimate_shop:
+  name: "Ultimate Shop"
+  format: "<anim_rainbow><obfuscated>X</obfuscated> <bold>ULTIMATE SHOP</bold> <obfuscated>X</obfuscated></anim_rainbow>"
+  price: 100000.0

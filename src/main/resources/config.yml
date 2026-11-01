@@ -75,3 +75,7 @@ ratings:
   prompt-after-purchase: true   # clickable stars in chat after closing the shop
   prompt-cooldown-minutes: 30
   show-on-nametag: true
+
+customization:
+  skins-enabled: true
+  nametags-enabled: true

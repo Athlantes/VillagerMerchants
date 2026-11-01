@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PricePromptListener implements Listener {
     private static final long TIMEOUT_MS = 60_000L;
 
-    private record Prompt(Shop shop, int idx, int page, long expires) {}
+    public record Prompt(Shop shop, int idx, int page, long expires) {}
 
     private final VillagerMerchants plugin;
     private final Map<UUID, Prompt> prompts = new ConcurrentHashMap<>();

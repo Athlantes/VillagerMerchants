@@ -66,9 +66,13 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
                 : Text.icon(Material.CLOCK, "<aqua>Extend Rent", "<gray>Status: " + status,
                         "<gray>Cost: <white>" + sm.money(sm.rentPrice(prof)), "<yellow>Click to extend"));
 
-        inv.setItem(20, Text.icon(Material.VILLAGER_SPAWN_EGG, "<aqua>Villager Skins",
-                "<gray>Biome: <white>" + prof.getSkinType(), "<gray>Outfit: <white>" + prof.getSkinProfession(),
-                "<yellow>Click to change"));
+        inv.setItem(20, Text.icon(Material.VILLAGER_SPAWN_EGG,
+                "<aqua><bold>Customization</bold></aqua>",
+                "<gray>Biome: <white>" + (prof.getSkinType() != null ? prof.getSkinType() : "none"),
+                "<gray>Outfit: <white>" + (prof.getSkinProfession() != null ? prof.getSkinProfession() : "none"),
+                "",
+                "<yellow>Click to customize NPC"
+        ));
 
         RatingManager.Summary rating = plugin.getRatings().summary(shop);
         List<String> salesLore = new ArrayList<>();
@@ -102,7 +106,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
             case 10 -> later(() -> new TradeEditorGui(plugin, player, shop).open());
             case 12 -> later(() -> player.openInventory(shop.getStorage()));
             case 14 -> later(() -> new UpgradeGui(plugin, player, shop).open());
-            case 20 -> later(() -> new SkinGui(plugin, player, shop).open());
+            case 20 -> later(() -> new CustomizationGui(plugin, player, shop).open());
             case 22 -> later(() -> {
                 player.closeInventory();
                 plugin.getTransactions().showHistory(player, DatabaseManager.TxMode.SALES, player.getUniqueId(), player.getName(), 1);

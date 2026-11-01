@@ -90,12 +90,22 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 npc.setInvulnerable(true);
                 npc.setCollidable(false);
                 npc.setSilent(true);
-                npc.setPersistent(true);
+                npc.setPersistent(false); // We now control persistence dynamically
                 npc.setRemoveWhenFarAway(false);
                 npc.setCanPickupItems(false);
+                npc.customName(null);
+                npc.setCustomNameVisible(false);
+
                 npc.getPersistentDataContainer().set(plugin.getShopManager().getShopKey(), PersistentDataType.BYTE, (byte) 1);
-                plugin.getShopManager().refreshNameTag(npc);
-                p.sendMessage(Text.mm("<green>Shop NPC created!"));
+
+                String formattedLoc = loc.getWorld().getName() + ";" + loc.getX() + ";" + loc.getY() + ";" + loc.getZ() + ";" + loc.getYaw() + ";" + loc.getPitch();
+
+                // Save this brand-new, unrented dummy shop to the DB so it persists on restart
+                Shop blankShop = new Shop(npc.getUniqueId(), UUID.randomUUID(), 0, formattedLoc);
+                plugin.getShopManager().saveShop(blankShop);
+
+                plugin.getNametagManager().spawnNametag(npc, "<green><bold>Available Shop</bold></green>");
+                p.sendMessage(Text.mm("<green>Shop NPC created & saved to database!"));
             }
             case "remove" -> {
                 if (!(sender instanceof Player p)) { sender.sendMessage("Players only."); return true; }
@@ -106,6 +116,10 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 }
                 Shop s = plugin.getShopManager().getShop(v.getUniqueId());
                 if (s != null) plugin.getShopManager().releaseShop(s, true);
+
+                for (Entity passenger : v.getPassengers()) passenger.remove();
+                plugin.getNametagManager().removeNametag(v.getUniqueId());
+
                 v.remove();
                 p.sendMessage(Text.mm("<green>Shop NPC removed" + (s != null ? " (owner's items moved to /vm claim)." : ".")));
             }
@@ -132,7 +146,6 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         try { return Math.max(1, Integer.parseInt(args[index])); } catch (NumberFormatException e) { return 1; }
     }
 
-    /** /vm rate <1-5>  (last shop you bought from)   or   /vm rate <shop-id> <1-5>  (used by the chat stars). */
     private void rate(Player p, String[] args) {
         try {
             if (args.length == 2) {
@@ -144,12 +157,11 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             } else {
                 p.sendMessage(Text.mm("<red>Usage: /vm rate <1-5>"));
             }
-        } catch (IllegalArgumentException e) { // bad number or shop id
+        } catch (IllegalArgumentException e) {
             p.sendMessage(Text.mm("<red>Usage: /vm rate <1-5>"));
         }
     }
 
-    /** Picks the shop NPC closest to the player's crosshair (raytraces miss non-collidable NPCs). */
     private Villager findLookedShopNpc(Player p) {
         Location eye = p.getEyeLocation();
         Vector dir = eye.getDirection();

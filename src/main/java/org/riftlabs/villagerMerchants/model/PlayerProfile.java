@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.model;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -13,6 +14,10 @@ public class PlayerProfile {
     private final Set<String> unlockedSkins = new HashSet<>();
     private String skinType = "plains";
     private String skinProfession = "none";
+
+    // Nametag Customization State
+    private final Set<String> unlockedNametags = new HashSet<>();
+    private String equippedNametagFormat = "<green><bold>Available Shop</bold></green>";
 
     public PlayerProfile(UUID uuid, int unlockedSlots, int taxLevel, int maxRentDays) {
         this.uuid = uuid;
@@ -46,5 +51,19 @@ public class PlayerProfile {
         }
         if (type != null && !type.isBlank()) skinType = type;
         if (profession != null && !profession.isBlank()) skinProfession = profession;
+    }
+
+    // Nametag Methods
+    public boolean ownsNametag(String formatId) { return unlockedNametags.contains(formatId); }
+    public void unlockNametag(String formatId) { unlockedNametags.add(formatId); }
+    public String getUnlockedNametagsString() { return String.join(",", unlockedNametags); }
+    public String getEquippedNametagFormat() { return equippedNametagFormat; }
+    public void setEquippedNametagFormat(String format) { this.equippedNametagFormat = format; }
+
+    public void loadNametags(String nametagsString) {
+        unlockedNametags.clear();
+        if (nametagsString != null && !nametagsString.isBlank()) {
+            for (String s : nametagsString.split(",")) if (!s.isBlank()) unlockedNametags.add(s.trim());
+        }
     }
 }

@@ -14,6 +14,7 @@ import org.riftlabs.villagerMerchants.listeners.JoinListener;
 import org.riftlabs.villagerMerchants.listeners.NpcLookTask;
 import org.riftlabs.villagerMerchants.listeners.PricePromptListener;
 import org.riftlabs.villagerMerchants.listeners.ShopInteractListener;
+import org.riftlabs.villagerMerchants.manager.NametagManager;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.manager.TeleportManager;
@@ -28,6 +29,7 @@ public final class VillagerMerchants extends JavaPlugin {
     private TransactionManager transactions;
     private RatingManager ratings;
     private TeleportManager teleports;
+    private NametagManager nametagManager;
     private CustomerTradeListener customerTrades;
     private PricePromptListener prompts;
     private Economy econ;
@@ -47,11 +49,16 @@ public final class VillagerMerchants extends JavaPlugin {
         registerPermissions();
 
         if (!getDataFolder().exists()) getDataFolder().mkdirs();
+
         databaseManager = new DatabaseManager(this);
         transactions = new TransactionManager(this, databaseManager);
         ratings = new RatingManager(this, databaseManager);
         teleports = new TeleportManager(this);
+
+        // Critical: Initialize managers BEFORE loading data
+        nametagManager = new NametagManager(this);
         shopManager = new ShopManager(this, databaseManager);
+
         shopManager.load();
         transactions.load();
         ratings.load();
@@ -82,8 +89,12 @@ public final class VillagerMerchants extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (shopManager != null) shopManager.saveAll();
-        if (databaseManager != null) databaseManager.disconnect(); // flushes queued writes
+        if (nametagManager != null) nametagManager.cleanup();
+        if (shopManager != null) {
+            shopManager.saveAll();
+            shopManager.despawnAll(); // Deletes all physical NPCs from the world to prevent chunk saving
+        }
+        if (databaseManager != null) databaseManager.disconnect();
     }
 
     private boolean setupEconomy() {
@@ -94,7 +105,6 @@ public final class VillagerMerchants extends JavaPlugin {
         return econ != null;
     }
 
-    /** Registered in code too, so the new nodes work even before plugin.yml is updated. */
     private void registerPermissions() {
         PluginManager pm = getServer().getPluginManager();
         addPermission(pm, "villagermerchants.shops", PermissionDefault.TRUE);
@@ -106,7 +116,6 @@ public final class VillagerMerchants extends JavaPlugin {
         if (pm.getPermission(node) == null) pm.addPermission(new Permission(node, def));
     }
 
-    /** Runs on the main thread, unless the plugin is shutting down (async DB callbacks can outlive it). */
     public void sync(Runnable r) {
         if (isEnabled()) getServer().getScheduler().runTask(this, r);
     }
@@ -118,6 +127,7 @@ public final class VillagerMerchants extends JavaPlugin {
     public TransactionManager getTransactions() { return transactions; }
     public RatingManager getRatings() { return ratings; }
     public TeleportManager getTeleports() { return teleports; }
+    public NametagManager getNametagManager() { return nametagManager; }
     public CustomerTradeListener getCustomerTrades() { return customerTrades; }
     public PricePromptListener getPrompts() { return prompts; }
 }
