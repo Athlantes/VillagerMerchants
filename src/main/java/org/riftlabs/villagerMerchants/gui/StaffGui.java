@@ -37,13 +37,14 @@ public class StaffGui implements GuiHolder, ShopBound {
         this.plugin = plugin;
         this.player = player;
         this.shop = shop;
-        this.inv = Bukkit.createInventory(this, 54, Text.mm("<dark_gray>Staff & Co-owners"));
+        this.inv = Bukkit.createInventory(this, 54, plugin.msg().get("staff-gui.title"));
         render();
     }
 
     private void render() {
         inv.clear();
         bySlot.clear();
+        var m = plugin.msg();
         int i = 0;
         for (Map.Entry<UUID, StaffRole> e : shop.getStaff().entrySet()) {
             if (i >= MAX_HEADS) break;
@@ -51,33 +52,25 @@ public class StaffGui implements GuiHolder, ShopBound {
             ItemStack head = new ItemStack(Material.PLAYER_HEAD);
             SkullMeta meta = (SkullMeta) head.getItemMeta();
             meta.setOwningPlayer(op);
-            meta.displayName(Text.item("<white>" + Text.esc(StaffManager.nameOf(op))));
-            List<Component> lore = new ArrayList<>();
-            lore.add(Text.item("<gray>Role: <gold>" + e.getValue().label()));
-            lore.add(Text.item(describe(e.getValue())));
-            lore.add(Text.item(""));
-            lore.add(Text.item("<yellow>Click: change role"));
-            lore.add(Text.item("<red>Shift-click: remove"));
-            meta.lore(lore);
+            meta.displayName(m.line("staff-gui.member.name", "name", StaffManager.nameOf(op)));
+            meta.lore(m.lines("staff-gui.member.lore", "role", e.getValue().label(),
+                    "description", m.ref("staff-gui.role-description." + e.getValue().key())));
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             head.setItemMeta(meta);
             inv.setItem(i, head);
             bySlot.put(i, e.getKey());
             i++;
         }
-        ItemStack pane = Text.icon(Material.BLACK_STAINED_GLASS_PANE, " ");
+        ItemStack pane = Gui.filler(plugin);
         for (int s = 36; s < 54; s++) inv.setItem(s, pane);
-        inv.setItem(BACK, Text.icon(Material.OAK_DOOR, "<red>Back"));
-        inv.setItem(47, Text.icon(Material.PAPER, "<white>Roles",
-                "<gold>Stocker<gray>: storage only (can also take payments)",
-                "<gold>Manager<gray>: + trades, prices, sales, stats",
-                "<gold>Co-owner<gray>: + pay rent, featured listings",
-                "<dark_gray>Owner-only: cancel, upgrades, NPC look, staff"));
-        boolean full = shop.getStaff().size() >= plugin.getStaff().maxStaff();
+        inv.setItem(BACK, Gui.back(plugin));
+        inv.setItem(47, m.icon(plugin.material("staff-roles", Material.PAPER), "staff-gui.roles",
+                "stocker", StaffRole.STOCKER.label(), "manager", StaffRole.MANAGER.label(), "co_owner", StaffRole.CO_OWNER.label()));
+        int max = plugin.getStaff().maxStaff();
+        boolean full = shop.getStaff().size() >= max;
         inv.setItem(ADD, full
-                ? Text.icon(Material.GRAY_DYE, "<gray>Staff list is full", "<gray>Maximum: <white>" + plugin.getStaff().maxStaff())
-                : Text.icon(Material.EMERALD, "<green>Add staff", "<gray>Members: <white>" + shop.getStaff().size() + "/" + plugin.getStaff().maxStaff(),
-                        "<yellow>Click, then type a player name in chat"));
+                ? m.icon(plugin.material("staff-full", Material.GRAY_DYE), "staff-gui.full", "max", max)
+                : m.icon(plugin.material("staff-add", Material.EMERALD), "staff-gui.add", "count", shop.getStaff().size(), "max", max));
     }
 
     public void open() { player.openInventory(inv); }
@@ -96,46 +89,38 @@ public class StaffGui implements GuiHolder, ShopBound {
             later(() -> {
                 player.closeInventory();
                 plugin.getChatPrompts().begin(player,
-                        "<yellow>Type the <gold>name</gold> of the player to add as staff <gray>(they must have joined before; new staff start as Stocker).",
+                        plugin.msg().get("staff-gui.prompt", "role", StaffRole.STOCKER.label()),
                         name -> addByName(name), () -> reopen());
             });
             return;
         }
         UUID target = bySlot.get(slot);
         if (target == null) return;
-        String err;
+        Component err;
         if (e.getClick() == ClickType.SHIFT_LEFT || e.getClick() == ClickType.SHIFT_RIGHT) {
             err = sm.remove(player, shop, target);
         } else {
             StaffRole cur = shop.roleOf(target);
             err = cur == null ? null : sm.setRole(player, shop, target, cur.next());
         }
-        if (err != null) player.sendMessage(Text.mm(err));
+        if (err != null) player.sendMessage(err);
         render();
     }
 
     private void addByName(String name) {
         OfflinePlayer target = plugin.getStaff().findPlayer(name.split("\\s+")[0]);
         if (target == null) {
-            player.sendMessage(Text.mm("<red>I don't know a player called <white>" + Text.esc(name) + "</white>."));
+            plugin.msg().send(player, "staff-gui.unknown-player", "name", name);
         } else {
-            String err = plugin.getStaff().add(player, shop, target, StaffRole.STOCKER);
-            player.sendMessage(Text.mm(err != null ? err : "<green>Added <white>" + Text.esc(StaffManager.nameOf(target))
-                    + "</white> as Stocker. Click their head to promote them."));
+            Component err = plugin.getStaff().add(player, shop, target, StaffRole.STOCKER);
+            player.sendMessage(err != null ? err : plugin.msg().get("staff-gui.added",
+                    "name", StaffManager.nameOf(target), "role", StaffRole.STOCKER.label()));
         }
         reopen();
     }
 
     private void reopen() {
         if (plugin.getShopManager().isLive(shop)) new StaffGui(plugin, player, shop).open();
-    }
-
-    private static String describe(StaffRole r) {
-        return switch (r) {
-            case STOCKER -> "<dark_gray>Storage";
-            case MANAGER -> "<dark_gray>Storage, trades, sales, stats";
-            case CO_OWNER -> "<dark_gray>Everything except owner-only actions";
-        };
     }
 
     private void later(Runnable r) { Bukkit.getScheduler().runTask(plugin, r); }

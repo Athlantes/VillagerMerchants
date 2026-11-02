@@ -22,8 +22,8 @@ public final class CurrencyToken {
     public static void init(Plugin plugin) { key = new NamespacedKey(plugin, "currency_token"); }
 
     public static ItemStack create(Material material, String priceText) {
-        ItemStack it = Text.icon(material, "<gold>" + Text.esc(priceText),
-                "<gray>Paid straight from your balance.", "<dark_gray>Display item - not a real item.");
+        ItemStack it = org.riftlabs.villagerMerchants.VillagerMerchants.getInstance().msg()
+                .icon(material, "token", "price", priceText);
         ItemMeta meta = it.getItemMeta();
         meta.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
         it.setItemMeta(meta);

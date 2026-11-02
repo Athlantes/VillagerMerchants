@@ -23,24 +23,23 @@ public class RentGui implements GuiHolder {
         this.plugin = plugin;
         this.player = player;
         this.npcId = npcId;
-        this.inv = Bukkit.createInventory(this, 27, Text.mm("<dark_gray>Rent this shop?"));
+        this.inv = Bukkit.createInventory(this, 27, plugin.msg().get("rent-gui.title"));
         render();
     }
 
     private void render() {
+        var m = plugin.msg();
         ShopManager sm = plugin.getShopManager();
         PlayerProfile prof = sm.getProfile(player.getUniqueId());
         int days = Math.min(plugin.getConfig().getInt("rent.base-days", 7), prof.getMaxRentDays());
+        int discount = (int) Math.round(prof.getTaxLevel() * plugin.getConfig().getDouble("upgrades.tax.per-level", 0.05) * 100);
 
-        inv.setItem(13, Text.icon(Material.PAPER, "<gold>Rent Cost: " + sm.money(sm.rentPrice(prof)),
-                "<gray>Duration: <white>" + days + " days",
-                "<gray>Trade slots: <white>" + prof.getUnlockedSlots(),
-                "<gray>Rent discount: <white>" + (int) Math.round(prof.getTaxLevel()
-                        * plugin.getConfig().getDouble("upgrades.tax.per-level", 0.05) * 100) + "%"));
+        inv.setItem(13, m.icon(plugin.material("rent-info", Material.PAPER), "rent-gui.info",
+                "cost", sm.money(sm.rentPrice(prof)), "days", days, "slots", prof.getUnlockedSlots(), "discount", discount));
         inv.setItem(11, confirming
-                ? Text.glow(Text.icon(Material.YELLOW_CONCRETE, "<yellow>Click again to confirm"))
-                : Text.icon(Material.LIME_CONCRETE, "<green>Rent Shop"));
-        inv.setItem(15, Text.icon(Material.RED_CONCRETE, "<red>Cancel"));
+                ? Text.glow(m.icon(plugin.material("rent-confirm", Material.YELLOW_CONCRETE), "gui.confirm"))
+                : m.icon(plugin.material("rent-accept", Material.LIME_CONCRETE), "rent-gui.accept"));
+        inv.setItem(15, m.icon(plugin.material("rent-cancel", Material.RED_CONCRETE), "gui.cancel"));
     }
 
     public void open() { player.openInventory(inv); }

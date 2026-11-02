@@ -14,6 +14,8 @@ import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.util.Text;
 
 public class UpgradeGui implements GuiHolder, ShopBound {
+    private static final int BACK = 22;
+
     private final VillagerMerchants plugin;
     private final Player player;
     private final Shop shop;
@@ -24,7 +26,7 @@ public class UpgradeGui implements GuiHolder, ShopBound {
         this.plugin = plugin;
         this.player = player;
         this.shop = shop;
-        this.inv = Bukkit.createInventory(this, 27, Text.mm("<dark_gray>Upgrades"));
+        this.inv = Bukkit.createInventory(this, 27, plugin.msg().get("upgrade.title"));
         render();
     }
 
@@ -38,37 +40,42 @@ public class UpgradeGui implements GuiHolder, ShopBound {
     }
 
     private void render() {
+        var m = plugin.msg();
         ShopManager sm = plugin.getShopManager();
         PlayerProfile p = sm.getProfile(player.getUniqueId());
         for (UpgradeType t : UpgradeType.values()) {
             int lvl = sm.level(t, p), max = sm.maxLevel(t);
             boolean maxed = lvl >= max;
-            Material mat = switch (t) { case SLOTS -> Material.BARREL; case TAX -> Material.GOLD_INGOT; case DURATION -> Material.CLOCK; };
-            String name = switch (t) { case SLOTS -> "Trade Slots"; case TAX -> "Rent Discount"; case DURATION -> "Max Rent Duration"; };
+            Material mat = switch (t) {
+                case SLOTS -> plugin.material("upgrade-slots", Material.BARREL);
+                case TAX -> plugin.material("upgrade-tax", Material.GOLD_INGOT);
+                case DURATION -> plugin.material("upgrade-duration", Material.CLOCK);
+            };
+            String base = "upgrade.types." + t.key;
+            String name = m.raw(base + ".name");
             String now = switch (t) {
-                case SLOTS -> p.getUnlockedSlots() + " slots";
-                case TAX -> (int) Math.round(p.getTaxLevel() * sm.perLevel(t) * 100) + "% off rent";
-                case DURATION -> p.getMaxRentDays() + " days";
+                case SLOTS -> m.str(base + ".current", "slots", p.getUnlockedSlots());
+                case TAX -> m.str(base + ".current", "percent", (int) Math.round(p.getTaxLevel() * sm.perLevel(t) * 100));
+                case DURATION -> m.str(base + ".current", "days", p.getMaxRentDays());
             };
             String gain = switch (t) {
-                case SLOTS -> "+" + (int) sm.perLevel(t) + " slot";
-                case TAX -> "+" + (int) Math.round(sm.perLevel(t) * 100) + "% off";
-                case DURATION -> "+" + (int) sm.perLevel(t) + " days";
+                case SLOTS -> m.str(base + ".gain", "amount", (int) sm.perLevel(t));
+                case TAX -> m.str(base + ".gain", "percent", (int) Math.round(sm.perLevel(t) * 100));
+                case DURATION -> m.str(base + ".gain", "days", (int) sm.perLevel(t));
             };
+            String cost = sm.money(sm.upgradeCost(t, p));
             ItemStack it;
             if (maxed) {
-                it = Text.icon(mat, "<gold>" + name + " <green>(MAX)", "<gray>Current: <white>" + now);
+                it = m.icon(mat, "upgrade.item.maxed", "name", name, "current", now);
             } else if (confirming == t) {
-                it = Text.glow(Text.icon(mat, "<yellow>Click again to confirm",
-                        "<gray>" + gain + " for <white>" + sm.money(sm.upgradeCost(t, p))));
+                it = Text.glow(m.icon(mat, "upgrade.item.confirm", "gain", gain, "cost", cost));
             } else {
-                it = Text.icon(mat, "<gold>" + name, "<gray>Level: <white>" + lvl + "/" + max,
-                        "<gray>Current: <white>" + now, "<gray>Next: <green>" + gain,
-                        "<gray>Cost: <white>" + sm.money(sm.upgradeCost(t, p)), "<yellow>Click to buy");
+                it = m.icon(mat, "upgrade.item.buy", "name", name, "level", lvl, "max", max,
+                        "current", now, "gain", gain, "cost", cost);
             }
             inv.setItem(slotOf(t), it);
         }
-        inv.setItem(22, Text.icon(Material.OAK_DOOR, "<red>Back"));
+        inv.setItem(BACK, Gui.back(plugin));
     }
 
     public void open() { player.openInventory(inv); }
@@ -78,7 +85,7 @@ public class UpgradeGui implements GuiHolder, ShopBound {
         e.setCancelled(true);
         if (e.getClickedInventory() != inv) return;
         int slot = e.getSlot();
-        if (slot == 22) {
+        if (slot == BACK) {
             Bukkit.getScheduler().runTask(plugin, () -> new OwnerMenuGui(plugin, player, shop).open());
             return;
         }

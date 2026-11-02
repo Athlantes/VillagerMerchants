@@ -11,9 +11,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.model.Shop;
+import org.riftlabs.villagerMerchants.util.Messages;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -21,10 +23,10 @@ import java.util.UUID;
 
 /** Teleports players to a shop from the /shops directory: warm-up, cooldown, optional cost, safe landing spot. */
 public class TeleportManager {
-    private static final Set<Material> BAD_FLOOR = EnumSet.of(Material.MAGMA_BLOCK, Material.CACTUS,
-            Material.CAMPFIRE, Material.SOUL_CAMPFIRE, Material.LAVA);
-    private static final Set<Material> BAD_AIR = EnumSet.of(Material.FIRE, Material.SOUL_FIRE,
-            Material.SWEET_BERRY_BUSH, Material.WITHER_ROSE, Material.POWDER_SNOW, Material.COBWEB, Material.LAVA);
+    // Built-in lists, used when directory.teleport.unsafe-floor / unsafe-air are missing from config.yml.
+    private static final List<String> DEFAULT_BAD_FLOOR = List.of("MAGMA_BLOCK", "CACTUS", "CAMPFIRE", "SOUL_CAMPFIRE", "LAVA");
+    private static final List<String> DEFAULT_BAD_AIR = List.of("FIRE", "SOUL_FIRE", "SWEET_BERRY_BUSH", "WITHER_ROSE",
+            "POWDER_SNOW", "COBWEB", "LAVA");
 
     private final VillagerMerchants plugin;
     private final Map<UUID, Long> cooldownUntil = new HashMap<>();
@@ -37,21 +39,32 @@ public class TeleportManager {
     public boolean enabled() { return cfg().getBoolean("directory.teleport.enabled", true); }
     public double cost() { return Math.max(0, cfg().getDouble("directory.teleport.cost", 0.0)); }
 
+    private Set<Material> materials(String path, List<String> defaults) {
+        List<String> names = cfg().isList(path) ? cfg().getStringList(path) : defaults;
+        Set<Material> out = EnumSet.noneOf(Material.class);
+        for (String n : names) {
+            Material m = Material.matchMaterial(n.trim());
+            if (m != null) out.add(m);
+        }
+        return out;
+    }
+
     /** Entry point from the directory GUI. */
     public void request(Player p, Shop shop) {
         ShopManager sm = plugin.getShopManager();
-        if (!enabled()) { p.sendMessage(Text.mm("<red>Shop teleporting is disabled.")); return; }
+        var m = plugin.msg();
+        if (!enabled()) { m.send(p, "teleport.disabled"); return; }
         if (!p.hasPermission("villagermerchants.shops.teleport")) {
-            p.sendMessage(Text.mm("<red>You don't have permission to teleport to shops."));
+            m.send(p, "teleport.no-permission");
             return;
         }
         if (!sm.isLive(shop) || !shop.isActive(System.currentTimeMillis())) {
-            p.sendMessage(Text.mm("<red>That shop is closed."));
+            m.send(p, "teleport.shop-closed");
             return;
         }
         Location target = parse(shop.getLocation());
         if (target == null) {
-            p.sendMessage(Text.mm("<red>That shop's location isn't available right now."));
+            m.send(p, "teleport.no-location");
             return;
         }
 
@@ -59,12 +72,12 @@ public class TeleportManager {
         if (!bypass) {
             long left = cooldownUntil.getOrDefault(p.getUniqueId(), 0L) - System.currentTimeMillis();
             if (left > 0) {
-                p.sendMessage(Text.mm("<red>Please wait " + Math.max(1, (left + 999) / 1000) + "s before teleporting again."));
+                m.send(p, "teleport.cooldown", "seconds", Math.max(1, (left + 999) / 1000));
                 return;
             }
             double cost = cost();
             if (cost > 0 && !plugin.getEconomy().has(p, cost)) {
-                p.sendMessage(Text.mm("<red>You need " + sm.money(cost) + " to teleport."));
+                m.send(p, "teleport.need-money", "amount", sm.money(cost));
                 return;
             }
         }
@@ -75,14 +88,15 @@ public class TeleportManager {
 
         final Location start = p.getLocation();
         final int[] waited = {0};
-        p.sendMessage(Text.mm("<yellow>Teleporting in " + warmup + " seconds. Don't move!"));
+        final double tolerance = Math.max(0.0, cfg().getDouble("directory.teleport.move-tolerance", 0.7));
+        m.send(p, "teleport.warmup", "seconds", warmup);
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
             @Override public void run() {
                 if (!p.isOnline()) { cancelPending(p.getUniqueId()); return; }
                 Location now = p.getLocation();
-                if (now.getWorld() != start.getWorld() || now.distanceSquared(start) > 0.5) {
+                if (now.getWorld() != start.getWorld() || now.distanceSquared(start) > tolerance * tolerance) {
                     cancelPending(p.getUniqueId());
-                    p.sendMessage(Text.mm("<red>Teleport cancelled because you moved."));
+                    m.send(p, "teleport.cancelled-moved");
                     return;
                 }
                 waited[0] += 5;
@@ -106,7 +120,7 @@ public class TeleportManager {
                 Bukkit.getScheduler().runTask(plugin, () -> finish(p, shop, target, bypass))
         ).exceptionally(ex -> {
             Bukkit.getScheduler().runTask(plugin, () ->
-                    p.sendMessage(Text.mm("<red>Couldn't load that area. Try again.")));
+                    plugin.msg().send(p, "teleport.load-failed"));
             return null;
         });
     }
@@ -115,12 +129,12 @@ public class TeleportManager {
         if (!p.isOnline()) return;
         ShopManager sm = plugin.getShopManager();
         if (!sm.isLive(shop) || !shop.isActive(System.currentTimeMillis())) {
-            p.sendMessage(Text.mm("<red>That shop closed while you were waiting."));
+            plugin.msg().send(p, "teleport.closed-while-waiting");
             return;
         }
         Location spot = findSpot(target);
         if (spot == null) {
-            p.sendMessage(Text.mm("<red>Couldn't find a safe spot next to that shop."));
+            plugin.msg().send(p, "teleport.no-safe-spot");
             return;
         }
 
@@ -128,7 +142,7 @@ public class TeleportManager {
         if (cost > 0) {
             Economy econ = plugin.getEconomy();
             if (!econ.has(p, cost) || !econ.withdrawPlayer(p, cost).transactionSuccess()) {
-                p.sendMessage(Text.mm("<red>You need " + sm.money(cost) + " to teleport."));
+                plugin.msg().send(p, "teleport.need-money", "amount", sm.money(cost));
                 return;
             }
         }
@@ -140,11 +154,12 @@ public class TeleportManager {
         final String owner = sm.ownerName(shop.getOwner());
         p.teleportAsync(spot).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
             if (ok) {
-                p.sendMessage(Text.mm("<green>Welcome to <gold>" + Text.esc(owner) + "'s Shop</gold>!"
-                        + (cost > 0 ? " <gray>(-" + sm.money(cost) + ")" : "")));
+                var m = plugin.msg();
+                m.send(p, "teleport.welcome", "owner", owner,
+                        "cost", cost > 0 ? m.ref("teleport.welcome-cost", "cost", Text.esc(sm.money(cost))) : Messages.parsed(""));
             } else {
                 if (cost > 0) plugin.getEconomy().depositPlayer(p, cost); // teleport failed: give the money back
-                p.sendMessage(Text.mm("<red>The teleport failed."));
+                plugin.msg().send(p, "teleport.failed");
             }
         }));
     }
@@ -168,6 +183,8 @@ public class TeleportManager {
 
     /** Finds a standable spot a block or two away from the NPC and turns the player to face it. */
     private Location findSpot(Location npc) {
+        Set<Material> badFloor = materials("directory.teleport.unsafe-floor", DEFAULT_BAD_FLOOR);
+        Set<Material> badAir = materials("directory.teleport.unsafe-air", DEFAULT_BAD_AIR);
         World w = npc.getWorld();
         int bx = npc.getBlockX(), by = npc.getBlockY(), bz = npc.getBlockZ();
         int[][] offsets = {{0, 2}, {2, 0}, {0, -2}, {-2, 0}, {2, 2}, {-2, 2}, {2, -2}, {-2, -2},
@@ -179,8 +196,8 @@ public class TeleportManager {
                 Block floor = feet.getRelative(0, -1, 0);
                 if (!feet.isPassable() || !head.isPassable()) continue;
                 if (feet.isLiquid() || head.isLiquid()) continue;
-                if (BAD_AIR.contains(feet.getType()) || BAD_AIR.contains(head.getType())) continue;
-                if (!floor.getType().isSolid() || BAD_FLOOR.contains(floor.getType())) continue;
+                if (badAir.contains(feet.getType()) || badAir.contains(head.getType())) continue;
+                if (!floor.getType().isSolid() || badFloor.contains(floor.getType())) continue;
 
                 double x = feet.getX() + 0.5, z = feet.getZ() + 0.5;
                 double dx = npc.getX() - x, dz = npc.getZ() - z;

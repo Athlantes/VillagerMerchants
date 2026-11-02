@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -31,36 +32,38 @@ public class FeaturedGui implements GuiHolder, ShopBound {
         this.shop = shop;
         List<FeaturedPackage> all = plugin.getPromotions().packages();
         this.packages = all.subList(0, Math.min(7, all.size()));
-        this.inv = Bukkit.createInventory(this, 27, Text.mm("<dark_gray>Featured Listing"));
+        this.inv = Bukkit.createInventory(this, 27, plugin.msg().get("featured-gui.title"));
         render();
     }
 
     private void render() {
         inv.clear();
+        var m = plugin.msg();
         PromotionManager promo = plugin.getPromotions();
         long now = System.currentTimeMillis();
 
-        inv.setItem(INFO, Text.icon(Material.NETHER_STAR, shop.isFeatured(now) ? "<gold>Featured" : "<gold>Not featured",
-                shop.isFeatured(now) ? "<gray>Time left: <white>" + Text.duration(shop.getFeaturedUntil() - now)
-                        : "<gray>Pin your shop above all others in /shops.",
-                "<gray>Slots in use: <white>" + promo.featuredInUse() + "/" + promo.maxFeaturedSlots(),
-                "<dark_gray>Time keeps running while your rent is expired."));
+        inv.setItem(INFO, m.icon(plugin.material("featured-info", Material.NETHER_STAR),
+                shop.isFeatured(now) ? "featured-gui.info-active" : "featured-gui.info",
+                "time", Text.duration(shop.getFeaturedUntil() - now),
+                "used", promo.featuredInUse(), "max", promo.maxFeaturedSlots()));
 
         for (int i = 0; i < packages.size(); i++) {
             FeaturedPackage pkg = packages.get(i);
-            String blocker = promo.featuredBlocker(shop, pkg);
-            String name = "<yellow>" + pkg.hours() + " hours";
+            Component blocker = promo.featuredBlocker(shop, pkg);
+            String price = plugin.getShopManager().money(pkg.price());
             if (blocker != null) {
-                inv.setItem(FIRST + i, Text.icon(Material.GRAY_DYE, name, "<gray>Price: <white>" + plugin.getShopManager().money(pkg.price()), blocker));
+                inv.setItem(FIRST + i, m.iconPlus(plugin.material("featured-blocked", Material.GRAY_DYE), "featured-gui.package-blocked",
+                        List.of(blocker), "hours", pkg.hours(), "price", price));
             } else if (confirming == i) {
-                inv.setItem(FIRST + i, Text.glow(Text.icon(Material.EMERALD, "<green>Click again to buy", "<gray>" + pkg.hours() + "h for <white>"
-                        + plugin.getShopManager().money(pkg.price()), "<gray>Paid from your own balance.")));
+                inv.setItem(FIRST + i, Text.glow(m.icon(plugin.material("featured-package", Material.EMERALD), "featured-gui.package-confirm",
+                        "hours", pkg.hours(), "price", price)));
             } else {
-                inv.setItem(FIRST + i, Text.icon(Material.EMERALD, name, "<gray>Price: <white>" + plugin.getShopManager().money(pkg.price()),
-                        shop.isFeatured(now) ? "<gray>Adds to your remaining time." : "<gray>Starts right away.", "<yellow>Click to buy"));
+                inv.setItem(FIRST + i, m.icon(plugin.material("featured-package", Material.EMERALD), "featured-gui.package",
+                        "hours", pkg.hours(), "price", price,
+                        "note", m.ref(shop.isFeatured(now) ? "featured-gui.note-extend" : "featured-gui.note-start")));
             }
         }
-        inv.setItem(BACK, Text.icon(Material.OAK_DOOR, "<red>Back"));
+        inv.setItem(BACK, Gui.back(plugin));
     }
 
     public void open() { player.openInventory(inv); }

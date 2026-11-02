@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
 import org.riftlabs.villagerMerchants.model.Shop;
+import org.riftlabs.villagerMerchants.util.Messages;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.HashMap;
@@ -22,9 +23,8 @@ public class RatingManager {
         public static final Summary NONE = new Summary(0, 0);
     }
 
-    // Bayesian prior for sorting: a single 5-star vote shouldn't outrank a proven 4.8 shop.
-    private static final double PRIOR_WEIGHT = 3.0;
-    private static final double PRIOR_MEAN = 3.5;
+    // Bayesian prior for sorting ("Top rated"): a single 5-star vote shouldn't outrank a proven 4.8 shop.
+    // Both values are configurable under ratings.ranking in config.yml.
 
     private final VillagerMerchants plugin;
     private final DatabaseManager db;
@@ -66,7 +66,9 @@ public class RatingManager {
         double[] a = agg.get(key(s));
         double sum = a == null ? 0 : a[0];
         double n = a == null ? 0 : a[1];
-        return (sum + PRIOR_WEIGHT * PRIOR_MEAN) / (n + PRIOR_WEIGHT);
+        double weight = Math.max(0.0, cfg().getDouble("ratings.ranking.prior-weight", 3.0));
+        double mean = cfg().getDouble("ratings.ranking.prior-mean", 3.5);
+        return (sum + weight * mean) / (n + weight);
     }
 
     /** Text appended to the NPC name tag, e.g. " <yellow>(star)4.6". Empty when disabled or unrated. */
@@ -74,7 +76,7 @@ public class RatingManager {
         if (!cfg().getBoolean("ratings.show-on-nametag", true)) return "";
         Summary r = summary(s);
         if (r.count() == 0) return "";
-        return " <yellow>\u2605" + Text.oneDecimal(r.average());
+        return plugin.msg().str("nametag.rating-suffix", "rating", Text.oneDecimal(r.average()));
     }
 
     public UUID lastPurchased(UUID player) { return lastPurchased.get(player); }
@@ -103,13 +105,12 @@ public class RatingManager {
             if (db.getRating(sid, owner, rater) > 0) return; // already rated: don't nag
             plugin.sync(() -> {
                 if (!p.isOnline()) return;
-                StringBuilder sb = new StringBuilder("<gold>Enjoyed shopping at <white><owner>'s</white> shop? Rate it: ");
+                var m = plugin.msg();
+                StringBuilder stars = new StringBuilder();
                 for (int n = 1; n <= 5; n++) {
-                    sb.append("<click:run_command:'/vm rate ").append(sid).append(' ').append(n).append("'>")
-                      .append("<hover:show_text:'Rate ").append(n).append(" out of 5'>")
-                      .append("<yellow>").append("\u2605".repeat(n)).append("</yellow></hover></click> ");
+                    stars.append(m.str("ratings.prompt-star", "shop", sid, "n", n, "stars", m.raw("stars.filled").repeat(n)));
                 }
-                p.sendMessage(Text.mm(sb.toString(), Placeholder.unparsed("owner", ownerName)));
+                p.sendMessage(m.get("ratings.prompt", "owner", ownerName, "stars", Messages.parsed(stars.toString())));
             });
         });
     }
@@ -117,15 +118,15 @@ public class RatingManager {
     // ------------------------------------------------------------ rating
 
     public void rate(Player p, UUID shopId, int stars) {
-        if (!enabled()) { p.sendMessage(Text.mm("<red>Ratings are disabled on this server.")); return; }
-        if (stars < 1 || stars > 5) { p.sendMessage(Text.mm("<red>Pick between 1 and 5 stars.")); return; }
+        if (!enabled()) { plugin.msg().send(p, "ratings.disabled"); return; }
+        if (stars < 1 || stars > 5) { plugin.msg().send(p, "ratings.pick-stars"); return; }
         Shop shop = plugin.getShopManager().getShop(shopId);
         if (shop == null || !shop.isActive(System.currentTimeMillis())) {
-            p.sendMessage(Text.mm("<red>That shop isn't open any more."));
+            plugin.msg().send(p, "ratings.shop-closed");
             return;
         }
         if (shop.isMember(p.getUniqueId())) {
-            p.sendMessage(Text.mm("<red>You can't rate a shop you own or work at."));
+            plugin.msg().send(p, "ratings.own-shop");
             return;
         }
 
@@ -138,7 +139,7 @@ public class RatingManager {
 
         db.async(() -> {
             if (requirePurchase && !db.hasPurchased(sid, owner, rater)) {
-                plugin.sync(() -> p.sendMessage(Text.mm("<red>Buy something from this shop before rating it.")));
+                plugin.sync(() -> plugin.msg().send(p, "ratings.need-purchase"));
                 return;
             }
             int previous = db.getRating(sid, owner, rater);
@@ -147,18 +148,12 @@ public class RatingManager {
             plugin.sync(() -> {
                 agg.put(key(sid, owner), new double[]{a.sum(), a.count()});
                 if (p.isOnline()) {
-                    p.sendMessage(Text.mm(previous > 0
-                            ? "<green>Updated your rating to <yellow><stars>\u2605</yellow>."
-                            : "<green>Thanks for rating! You gave <yellow><stars>\u2605</yellow>.",
-                            Placeholder.unparsed("stars", String.valueOf(stars))));
+                    plugin.msg().send(p, previous > 0 ? "ratings.updated" : "ratings.thanks", "stars", stars);
                 }
                 Player op = Bukkit.getPlayer(ownerId);
                 if (op != null) {
-                    op.sendMessage(Text.mm("<yellow><who></yellow> rated your shop <yellow><stars>\u2605</yellow> <gray>(avg <avg>, <count> rating(s))",
-                            Placeholder.unparsed("who", raterName),
-                            Placeholder.unparsed("stars", String.valueOf(stars)),
-                            Placeholder.unparsed("avg", Text.oneDecimal(a.count() == 0 ? 0 : a.sum() / a.count())),
-                            Placeholder.unparsed("count", String.valueOf(a.count()))));
+                    plugin.msg().send(op, "ratings.received", "who", raterName, "stars", stars,
+                            "avg", Text.oneDecimal(a.count() == 0 ? 0 : a.sum() / a.count()), "count", a.count());
                 }
                 plugin.getShopManager().refreshNameTag(shopId);
             });

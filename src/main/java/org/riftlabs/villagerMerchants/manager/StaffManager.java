@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.manager;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -32,44 +33,46 @@ public class StaffManager {
         return cached;
     }
 
-    /** @return null on success, otherwise an error message (MiniMessage). */
-    public String add(Player actor, Shop shop, OfflinePlayer target, StaffRole role) {
-        if (!enabled()) return "<red>Shop staff is disabled on this server.";
-        if (!shop.isOwner(actor.getUniqueId())) return "<red>Only the shop owner can manage staff.";
-        if (!actor.hasPermission("villagermerchants.staff")) return "<red>You don't have permission to hire staff.";
+    /** @return null on success, otherwise the error to show (ready for chat). */
+    public Component add(Player actor, Shop shop, OfflinePlayer target, StaffRole role) {
+        var m = plugin.msg();
+        if (!enabled()) return m.get("staff.error.disabled");
+        if (!shop.isOwner(actor.getUniqueId())) return m.get("staff.error.owner-only");
+        if (!actor.hasPermission("villagermerchants.staff")) return m.get("staff.error.no-permission");
         UUID id = target.getUniqueId();
-        if (shop.isOwner(id)) return "<red>That's you - you already own this shop.";
-        if (shop.getStaff().containsKey(id)) return "<red>" + Text.esc(nameOf(target)) + " is already on your staff. Change their role instead.";
-        if (shop.getStaff().size() >= maxStaff()) return "<red>You can have at most " + maxStaff() + " staff members per shop.";
+        if (shop.isOwner(id)) return m.get("staff.error.self");
+        if (shop.getStaff().containsKey(id)) return m.get("staff.error.already-staff", "player", nameOf(target));
+        if (shop.getStaff().size() >= maxStaff()) return m.get("staff.error.full", "max", maxStaff());
 
         shop.setStaff(id, role);
         plugin.getShopManager().saveShop(shop);
         Player online = target.getPlayer();
         if (online != null) {
-            online.sendMessage(Text.mm("<green>" + Text.esc(actor.getName()) + " made you <yellow>" + role.label()
-                    + "</yellow> of their shop. Right-click the shop villager to work there."));
+            m.send(online, "staff.notice.added", "actor", actor.getName(), "role", role.label());
         }
         return null;
     }
 
-    public String remove(Player actor, Shop shop, UUID target) {
-        if (!shop.isOwner(actor.getUniqueId())) return "<red>Only the shop owner can manage staff.";
-        if (!shop.removeStaff(target)) return "<red>That player isn't on your staff.";
+    public Component remove(Player actor, Shop shop, UUID target) {
+        var m = plugin.msg();
+        if (!shop.isOwner(actor.getUniqueId())) return m.get("staff.error.owner-only");
+        if (!shop.removeStaff(target)) return m.get("staff.error.not-staff");
         plugin.getShopManager().saveShop(shop);
         kickFromMenus(shop, target);
         Player online = Bukkit.getPlayer(target);
-        if (online != null) online.sendMessage(Text.mm("<yellow>You are no longer staff at " + Text.esc(plugin.getShopManager().ownerName(shop.getOwner())) + "'s shop."));
+        if (online != null) m.send(online, "staff.notice.removed", "owner", plugin.getShopManager().ownerName(shop.getOwner()));
         return null;
     }
 
-    public String setRole(Player actor, Shop shop, UUID target, StaffRole role) {
-        if (!shop.isOwner(actor.getUniqueId())) return "<red>Only the shop owner can manage staff.";
-        if (!shop.getStaff().containsKey(target)) return "<red>That player isn't on your staff.";
+    public Component setRole(Player actor, Shop shop, UUID target, StaffRole role) {
+        var m = plugin.msg();
+        if (!shop.isOwner(actor.getUniqueId())) return m.get("staff.error.owner-only");
+        if (!shop.getStaff().containsKey(target)) return m.get("staff.error.not-staff");
         shop.setStaff(target, role);
         plugin.getShopManager().saveShop(shop);
         kickFromMenus(shop, target);   // reopening shows the menu for the new role
         Player online = Bukkit.getPlayer(target);
-        if (online != null) online.sendMessage(Text.mm("<yellow>Your role at " + Text.esc(plugin.getShopManager().ownerName(shop.getOwner())) + "'s shop is now <gold>" + role.label() + "</gold>."));
+        if (online != null) m.send(online, "staff.notice.role-changed", "owner", plugin.getShopManager().ownerName(shop.getOwner()), "role", role.label());
         return null;
     }
 
@@ -87,5 +90,7 @@ public class StaffManager {
         return out;
     }
 
-    public static String nameOf(OfflinePlayer p) { return p.getName() == null ? "Unknown" : p.getName(); }
+    public static String nameOf(OfflinePlayer p) {
+        return p.getName() == null ? VillagerMerchants.getInstance().msg().raw("misc.unknown") : p.getName();
+    }
 }

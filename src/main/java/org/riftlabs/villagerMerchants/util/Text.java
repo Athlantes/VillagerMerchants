@@ -10,6 +10,8 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import org.riftlabs.villagerMerchants.VillagerMerchants;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -63,18 +65,22 @@ public final class Text {
         return it;
     }
 
+    private static Messages msg() { return VillagerMerchants.getInstance().msg(); }
+
+    /** "2d 3h", "1h 20m", "5m" or "expired"; the wording comes from the "time.*" keys of the language file. */
     public static String duration(long ms) {
-        if (ms <= 0) return "expired";
-        long m = ms / 60_000L;
-        long d = m / 1440, h = (m % 1440) / 60, min = m % 60;
-        if (d > 0) return d + "d " + h + "h";
-        if (h > 0) return h + "h " + min + "m";
-        return Math.max(1, min) + "m";
+        Messages m = msg();
+        if (ms <= 0) return m.raw("time.expired");
+        long mins = ms / 60_000L;
+        long d = mins / 1440, h = (mins % 1440) / 60, min = mins % 60;
+        if (d > 0) return m.str("time.days-hours", "days", d, "hours", h);
+        if (h > 0) return m.str("time.hours-minutes", "hours", h, "minutes", min);
+        return m.str("time.minutes", "minutes", Math.max(1, min));
     }
 
     /** Plain-text name of an item: custom name if it has one, otherwise the prettified material. */
     public static String itemName(ItemStack it) {
-        if (it == null) return "nothing";
+        if (it == null) return msg().raw("misc.nothing");
         ItemMeta meta = it.getItemMeta();
         if (meta != null && meta.hasDisplayName()) {
             String n = plain(meta.displayName());
@@ -97,7 +103,8 @@ public final class Text {
     /** MiniMessage fragment: filled/empty stars for an average rating. */
     public static String stars(double average) {
         int full = (int) Math.max(0, Math.min(5, Math.round(average)));
-        return "<yellow>" + "\u2605".repeat(full) + "<dark_gray>" + "\u2606".repeat(5 - full);
+        Messages m = msg();
+        return m.str("stars.format", "filled", m.raw("stars.filled").repeat(full), "empty", m.raw("stars.empty").repeat(5 - full));
     }
 
     public static String oneDecimal(double v) {

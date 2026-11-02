@@ -43,7 +43,7 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
         this.player = player;
         this.shop = shop;
         this.profile = plugin.getShopManager().getProfile(shop.getOwner());
-        this.inv = Bukkit.createInventory(this, 36, Text.mm("<dark_gray>Edit Trades"));
+        this.inv = Bukkit.createInventory(this, 36, plugin.msg().get("trade-editor.title"));
         this.page = Math.min(this.page, pages() - 1);
         render();
     }
@@ -51,55 +51,49 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
     private int pages() { return Math.max(1, (int) Math.ceil(profile.getUnlockedSlots() / (double) PER_PAGE)); }
 
     private ItemStack placeholder(int row) {
+        var m = plugin.msg();
         return switch (row) {
-            case 0 -> moneyOn()
-                    ? Text.icon(Material.YELLOW_STAINED_GLASS_PANE, "<yellow>Payment 1", "<gray>Hold an item and click to set.",
-                            "<gray>Or <white>shift-left-click</white> with an empty hand", "<gray>to charge money instead.")
-                    : Text.icon(Material.YELLOW_STAINED_GLASS_PANE, "<yellow>Payment 1", "<gray>Hold an item and click to set.");
-            case 1 -> Text.icon(Material.ORANGE_STAINED_GLASS_PANE, "<gold>Payment 2 <gray>(optional)", "<gray>Hold an item and click to set.");
-            default -> Text.icon(Material.LIME_STAINED_GLASS_PANE, "<green>Result", "<gray>What the customer receives.");
+            case 0 -> m.icon(plugin.material("trade-payment1", Material.YELLOW_STAINED_GLASS_PANE),
+                    moneyOn() ? "trade-editor.payment1-money" : "trade-editor.payment1");
+            case 1 -> m.icon(plugin.material("trade-payment2", Material.ORANGE_STAINED_GLASS_PANE), "trade-editor.payment2");
+            default -> m.icon(plugin.material("trade-result", Material.LIME_STAINED_GLASS_PANE), "trade-editor.result");
         };
     }
 
     private boolean moneyOn() { return plugin.getShopManager().moneyTradesEnabled(); }
 
     private void render() {
+        var m = plugin.msg();
         int unlocked = profile.getUnlockedSlots();
         for (int col = 0; col < PER_PAGE; col++) {
             int idx = page * PER_PAGE + col;
             for (int row = 0; row < 3; row++) {
                 int slot = row * 9 + col;
                 if (idx >= unlocked) {
-                    inv.setItem(slot, Text.icon(Material.BARRIER, "<red>Locked slot", "<gray>Buy more in Upgrades."));
+                    inv.setItem(slot, m.icon(plugin.material("trade-locked", Material.BARRIER), "trade-editor.locked"));
                     continue;
                 }
                 Trade t = shop.getTrade(idx);
                 if (t != null && t.isMoney() && row == 0) {
-                    inv.setItem(slot, Text.glow(Text.icon(plugin.getShopManager().tokenMaterial(),
-                            "<gold>Price: " + plugin.getShopManager().money(t.getPrice()),
-                            "<gray>Customers pay this from their balance.",
-                            "<yellow>Shift-left-click: change price", "<yellow>Left-click: remove price")));
+                    inv.setItem(slot, Text.glow(m.icon(plugin.getShopManager().tokenMaterial(), "trade-editor.price",
+                            "price", plugin.getShopManager().money(t.getPrice()))));
                     continue;
                 }
                 if (t != null && t.isMoney() && row == 1) {
-                    inv.setItem(slot, Text.icon(Material.GRAY_STAINED_GLASS_PANE, "<gray>Not used",
-                            "<dark_gray>Money trades have a single price.",
-                            "<dark_gray>Remove the price to use items again."));
+                    inv.setItem(slot, m.icon(plugin.material("trade-unused", Material.GRAY_STAINED_GLASS_PANE), "trade-editor.unused"));
                     continue;
                 }
                 ItemStack it = t == null ? null : t.get(row);
                 inv.setItem(slot, it != null ? it.clone() : placeholder(row));
             }
         }
-        ItemStack pane = Text.icon(Material.BLACK_STAINED_GLASS_PANE, " ");
+        ItemStack pane = Gui.filler(plugin);
         for (int i = 27; i < 36; i++) inv.setItem(i, pane);
-        if (page > 0) inv.setItem(27, Text.icon(Material.ARROW, "<yellow>Previous page"));
-        inv.setItem(29, Text.icon(Material.OAK_DOOR, "<red>Back"));
-        inv.setItem(31, Text.icon(Material.PAPER, "<white>Page " + (page + 1) + "/" + pages(),
-                "<gray>Left-click: clear slot", "<gray>Right-click: amount +1", "<gray>Shift-right: amount -1",
-                "<gray>Only trades with a payment (items or a money", "<gray>price) and a Result are live."));
-        if (shop.isOwner(player.getUniqueId())) inv.setItem(33, Text.icon(Material.NETHER_STAR, "<light_purple>Upgrades"));
-        if (page + 1 < pages()) inv.setItem(35, Text.icon(Material.ARROW, "<yellow>Next page"));
+        if (page > 0) inv.setItem(27, Gui.previousPage(plugin));
+        inv.setItem(29, Gui.back(plugin));
+        inv.setItem(31, m.icon(plugin.material("trade-page", Material.PAPER), "trade-editor.page", "page", page + 1, "pages", pages()));
+        if (shop.isOwner(player.getUniqueId())) inv.setItem(33, m.icon(plugin.material("trade-upgrades", Material.NETHER_STAR), "trade-editor.upgrades"));
+        if (page + 1 < pages()) inv.setItem(35, Gui.nextPage(plugin));
     }
 
     public void open() { player.openInventory(inv); }

@@ -172,7 +172,8 @@ public class ShopManager {
     public void startTasks() {
         long auto = Math.max(5, cfg().getLong("autosave-seconds", 30)) * 20L;
         Bukkit.getScheduler().runTaskTimer(plugin, this::saveDirty, auto, auto);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::checkExpiry, 20L * 30, 20L * 60);
+        long check = Math.max(10, cfg().getLong("rent.expiry-check-seconds", 60)) * 20L;
+        Bukkit.getScheduler().runTaskTimer(plugin, this::checkExpiry, 20L * 30, check);
     }
 
     private DatabaseManager.ShopRow toRow(Shop s) {
@@ -264,12 +265,13 @@ public class ShopManager {
 
     public String ownerName(UUID owner) {
         String n = Bukkit.getOfflinePlayer(owner).getName();
-        return n == null ? "Unknown" : n;
+        return n == null ? plugin.msg().raw("misc.unknown") : n;
     }
 
     public String money(double amount) {
         Economy e = plugin.getEconomy();
-        return e != null ? e.format(amount) : String.format("$%.2f", amount);
+        return e != null ? e.format(amount)
+                : plugin.msg().str("money.fallback", "amount", String.format(Locale.ROOT, "%.2f", amount));
     }
 
     public void refreshNameTag(Villager v) {
@@ -282,7 +284,7 @@ public class ShopManager {
 
         if (s == null) {
             Skins.apply(v, "plains", "none");
-            plugin.getNametagManager().spawnNametag(v, "<green><bold>Available Shop</bold></green>");
+            plugin.getNametagManager().spawnNametag(v, plugin.msg().raw("nametag.available"));
         } else {
             PlayerProfile pr = getProfile(s.getOwner());
             Skins.apply(v, pr.getSkinType(), pr.getSkinProfession());
@@ -291,7 +293,7 @@ public class ShopManager {
                 plugin.getNametagManager().spawnNametag(v, activeNametagFormat(s));
                 plugin.getEffectManager().set(v, activeEffectId(s));
             } else {
-                plugin.getNametagManager().spawnNametag(v, "<gray>Closed Shop</gray>");
+                plugin.getNametagManager().spawnNametag(v, plugin.msg().raw("nametag.closed"));
             }
         }
     }
@@ -300,8 +302,10 @@ public class ShopManager {
     public String activeNametagFormat(Shop s) {
         PlayerProfile pr = getProfile(s.getOwner());
         String rating = plugin.getRatings() == null ? "" : plugin.getRatings().nametagSuffix(s);
-        String personalized = pr.getEquippedNametagFormat().replace("<bold>", "<bold>" + ownerName(s.getOwner()) + "'s<br>");
-        personalized = personalized.replace("Available Shop", "Shop");
+        var m = plugin.msg();
+        String personalized = pr.getEquippedNametagFormat().replace("<bold>",
+                "<bold>" + m.str("nametag.owner-line", "owner", Text.esc(ownerName(s.getOwner()))));
+        personalized = personalized.replace(m.raw("nametag.replace-from"), m.raw("nametag.replace-to"));
         String banner = plugin.getPromotions() == null ? "" : plugin.getPromotions().nametagBanner(s);
         return personalized + rating + banner;
     }
@@ -324,11 +328,11 @@ public class ShopManager {
 
     public boolean rentShop(Player p, UUID npcId) {
         if (shops.containsKey(npcId)) {
-            p.sendMessage(Text.mm("<red>This shop was just rented by someone else."));
+            plugin.msg().send(p, "shop.rent.taken");
             return false;
         }
         if (countOwned(p.getUniqueId()) >= cfg().getInt("rent.max-shops-per-player", 3)) {
-            p.sendMessage(Text.mm("<red>You have reached the maximum number of shops."));
+            plugin.msg().send(p, "shop.rent.max-shops", "max", cfg().getInt("rent.max-shops-per-player", 3));
             return false;
         }
         PlayerProfile prof = getProfile(p.getUniqueId());
@@ -350,13 +354,13 @@ public class ShopManager {
         shops.put(npcId, s);
         saveShop(s);
         refreshNameTag(npcId);
-        p.sendMessage(Text.mm("<green>Shop rented for " + days + " days! Right-click it to manage it."));
+        plugin.msg().send(p, "shop.rent.success", "days", days);
         return true;
     }
 
     public boolean extendRent(Player p, Shop shop) {
         if (!shop.can(p.getUniqueId(), Perm.BILLING)) {
-            p.sendMessage(Text.mm("<red>You can't pay rent for this shop."));
+            plugin.msg().send(p, "shop.rent.no-permission");
             return false;
         }
         PlayerProfile prof = getProfile(shop.getOwner());   // the shop's upgrades apply, whoever pays
@@ -366,7 +370,7 @@ public class ShopManager {
         long room = now + prof.getMaxRentDays() * DAY - base;
         long ext = Math.min(addMs, room);
         if (ext < DAY) {
-            p.sendMessage(Text.mm("<red>You can't rent further ahead. Upgrade your max rent duration!"));
+            plugin.msg().send(p, "shop.rent.too-far");
             return false;
         }
         double price = Math.round(rentPrice(prof) * ((double) ext / addMs) * 100.0) / 100.0;
@@ -374,7 +378,7 @@ public class ShopManager {
         shop.setRentExpiry(base + ext);
         saveShop(shop);
         refreshNameTag(shop.getId());
-        p.sendMessage(Text.mm("<green>Rent extended by " + (ext / DAY) + " days."));
+        plugin.msg().send(p, "shop.rent.extended", "days", ext / DAY);
         return true;
     }
 
@@ -382,11 +386,11 @@ public class ShopManager {
     public boolean charge(Player p, double price) {
         Economy econ = plugin.getEconomy();
         if (!econ.has(p, price)) {
-            p.sendMessage(Text.mm("<red>You need " + money(price) + " for that."));
+            plugin.msg().send(p, "economy.not-enough", "amount", money(price));
             return false;
         }
         if (!econ.withdrawPlayer(p, price).transactionSuccess()) {
-            p.sendMessage(Text.mm("<red>The payment failed."));
+            plugin.msg().send(p, "economy.payment-failed");
             return false;
         }
         return true;
@@ -422,7 +426,7 @@ public class ShopManager {
         refreshNameTag(shop.getId());
 
         Player op = Bukkit.getPlayer(shop.getOwner());
-        if (notify && op != null) op.sendMessage(Text.mm("<yellow>Your shop has been released. Use <gold>/vm claim</gold> to retrieve leftover items."));
+        if (notify && op != null) plugin.msg().send(op, "shop.released");
     }
 
     public void claimItems(Player p) {
@@ -434,7 +438,7 @@ public class ShopManager {
                 try {
                     if (!p.isOnline()) return;
                     if (rows.isEmpty()) {
-                        p.sendMessage(Text.mm("<gray>You have nothing to claim."));
+                        plugin.msg().send(p, "shop.claim.nothing");
                         return;
                     }
                     int count = 0;
@@ -448,7 +452,7 @@ public class ShopManager {
                         int id = r.id();
                         db.async(() -> db.deleteClaim(id));
                     }
-                    p.sendMessage(Text.mm("<green>Claimed " + count + " items."));
+                    plugin.msg().send(p, "shop.claim.done", "count", count);
                 } finally {
                     claiming.remove(u);
                 }
@@ -477,7 +481,7 @@ public class ShopManager {
     public boolean purchaseUpgrade(Player pl, UpgradeType t) {
         PlayerProfile p = getProfile(pl.getUniqueId());
         if (level(t, p) >= maxLevel(t)) {
-            pl.sendMessage(Text.mm("<red>That upgrade is already maxed."));
+            plugin.msg().send(pl, "upgrade.maxed");
             return false;
         }
         if (!charge(pl, upgradeCost(t, p))) return false;
@@ -487,7 +491,7 @@ public class ShopManager {
             case DURATION -> p.setMaxRentDays(p.getMaxRentDays() + (int) perLevel(t));
         }
         saveProfile(p);
-        pl.sendMessage(Text.mm("<green>Upgrade purchased!"));
+        plugin.msg().send(pl, "upgrade.purchased");
         return true;
     }
 
@@ -503,11 +507,14 @@ public class ShopManager {
         double refund = cancelRefund(shop);
         if (refund > 0) plugin.getEconomy().depositPlayer(p, refund);
         releaseShop(shop, true, false);
-        p.sendMessage(Text.mm("<green>Shop cancelled." + (refund > 0 ? " Refunded " + money(refund) + "." : "")));
+        if (refund > 0) plugin.msg().send(p, "shop.cancelled-refund", "refund", money(refund));
+        else plugin.msg().send(p, "shop.cancelled");
         claimItems(p);
     }
 
     public double skinPrice(Skins.Skin s) {
+        String own = "skins.prices." + s.key();           // optional price for one specific skin
+        if (cfg().contains(own)) return Math.max(0, cfg().getDouble(own));
         return cfg().getDouble(s.kind() == Skins.Kind.TYPE ? "skins.type-price" : "skins.profession-price", 15000.0);
     }
 
@@ -530,7 +537,7 @@ public class ShopManager {
         if (owns(p, s)) return false;
         if (!charge(pl, skinPrice(s))) return false;
         p.unlockSkin(s.id());
-        pl.sendMessage(Text.mm("<green>Unlocked the <gold>" + s.name() + "</gold> skin permanently!"));
+        plugin.msg().send(pl, "skins.unlocked", "skin", s.name());
         equipSkin(pl, s);
         return true;
     }
@@ -562,7 +569,10 @@ public class ShopManager {
             MerchantRecipe r = new MerchantRecipe(res.clone(), inStock ? 0 : 1, inStock ? 1_000_000 : 1, false, 0, 0f);
             r.setIgnoreDiscounts(true);
             if (t.isMoney()) {
-                String label = money(shop.effectivePrice(t, now)) + (shop.isOnSale(now) ? " (-" + shop.getSalePercent() + "%)" : "");
+                String price = money(shop.effectivePrice(t, now));
+                String label = shop.isOnSale(now)
+                        ? plugin.msg().str("trade.price-label-sale", "price", price, "percent", shop.getSalePercent())
+                        : plugin.msg().str("trade.price-label", "price", price);
                 r.addIngredient(CurrencyToken.create(tokenMaterial(), label));
             } else {
                 r.addIngredient(t.getPay1().clone());

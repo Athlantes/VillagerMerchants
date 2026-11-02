@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -16,6 +17,8 @@ import org.riftlabs.villagerMerchants.model.Perm;
 import org.riftlabs.villagerMerchants.model.PlayerProfile;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.StaffRole;
+import org.riftlabs.villagerMerchants.util.Messages;
+import org.riftlabs.villagerMerchants.util.Skins;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.ArrayList;
@@ -37,14 +40,15 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
     private final boolean owner;
     private boolean confirmingRent;
     private boolean confirmingCancel;
-    private List<String> statsLines = List.of("<gray>Sales (7 days): <dark_gray>loading...");
+    private List<Component> statsLines;
 
     public OwnerMenuGui(VillagerMerchants plugin, Player player, Shop shop) {
         this.plugin = plugin;
         this.player = player;
         this.shop = shop;
         this.owner = shop.isOwner(player.getUniqueId());
-        this.inv = Bukkit.createInventory(this, 36, Text.mm("<dark_gray>" + (owner ? "Manage your shop" : "Manage shop (staff)")));
+        this.statsLines = plugin.msg().lines("owner-menu.stats.loading");
+        this.inv = Bukkit.createInventory(this, 36, plugin.msg().get(owner ? "owner-menu.title-owner" : "owner-menu.title-staff"));
         render();
         if (can(Perm.STATS)) loadStats();
     }
@@ -54,118 +58,119 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
     /** Sales numbers come from the database thread; the item is refreshed once they arrive. */
     private void loadStats() {
         plugin.getTransactions().loadStats(shop, st -> {
+            var m = plugin.msg();
+            int days = plugin.getTransactions().statsDays();
             statsLines = List.of(
-                    "<gray>Last 7 days: <white>" + st.sales7d() + " <gray>sale(s), <gold>" + plugin.getShopManager().money(st.money7d()),
-                    "<gray>All time: <white>" + st.salesTotal() + " <gray>sale(s), <gold>" + plugin.getShopManager().money(st.moneyTotal()));
+                    m.line("owner-menu.stats.recent", "days", days, "sales", st.sales7d(), "money", plugin.getShopManager().money(st.money7d())),
+                    m.line("owner-menu.stats.total", "sales", st.salesTotal(), "money", plugin.getShopManager().money(st.moneyTotal())));
             if (!inv.getViewers().isEmpty()) render();
         });
     }
 
+    private static String skinName(Skins.Kind kind, String key) {
+        Skins.Skin s = key == null ? null : Skins.find(kind.name().toLowerCase() + ":" + key);
+        return s != null ? s.name() : key;
+    }
+
     private void render() {
         inv.clear();
+        var m = plugin.msg();
         ShopManager sm = plugin.getShopManager();
         PromotionManager promo = plugin.getPromotions();
         PlayerProfile prof = sm.getProfile(shop.getOwner());   // slots, rent price and max duration belong to the shop
         long now = System.currentTimeMillis();
         long left = shop.getRentExpiry() - now;
         int complete = shop.completeTrades().size();
+        String staffCount = shop.getStaff().size() + "/" + plugin.getStaff().maxStaff();
 
         // ---- who's looking
         StaffRole role = shop.roleOf(player.getUniqueId());
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta sk = (SkullMeta) head.getItemMeta();
         sk.setOwningPlayer(Bukkit.getOfflinePlayer(shop.getOwner()));
-        sk.displayName(Text.item("<gold>" + Text.esc(sm.ownerName(shop.getOwner())) + "'s Shop"));
-        List<net.kyori.adventure.text.Component> hl = new ArrayList<>();
-        hl.add(Text.item("<gray>Your role: <white>" + (owner ? "Owner" : role == null ? "?" : role.label())));
-        hl.add(Text.item("<gray>Staff: <white>" + shop.getStaff().size() + "/" + plugin.getStaff().maxStaff()));
-        sk.lore(hl);
+        String roleLabel = owner ? m.raw("roles.owner") : role == null ? m.raw("roles.unknown") : role.label();
+        sk.displayName(m.line("owner-menu.head.name", "owner", sm.ownerName(shop.getOwner())));
+        sk.lore(m.lines("owner-menu.head.lore", "role", roleLabel, "staff", staffCount));
         head.setItemMeta(sk);
         inv.setItem(INFO, head);
 
         // ---- row 1
         if (can(Perm.TRADES)) {
-            inv.setItem(TRADES, Text.icon(Material.WRITABLE_BOOK, "<green>Edit Trades",
-                    "<gray>Active trades: <white>" + complete + "/" + prof.getUnlockedSlots(),
-                    "<yellow>Click to open"));
+            inv.setItem(TRADES, m.icon(plugin.material("owner-trades", Material.WRITABLE_BOOK), "owner-menu.trades",
+                    "active", complete, "slots", prof.getUnlockedSlots()));
         }
         if (can(Perm.STORAGE)) {
-            inv.setItem(STORAGE, Text.icon(Material.CHEST, "<gold>Storage",
-                    "<gray>Stock the items you sell here.", "<gray>Customer payments land here too.",
-                    "<yellow>Click to open"));
+            inv.setItem(STORAGE, m.icon(plugin.material("owner-storage", Material.CHEST), "owner-menu.storage"));
         }
         if (owner) {
-            inv.setItem(UPGRADES, Text.icon(Material.NETHER_STAR, "<light_purple>Upgrades",
-                    "<gray>Permanent: they stay with you", "<gray>between rentals.", "<yellow>Click to open"));
+            inv.setItem(UPGRADES, m.icon(plugin.material("owner-upgrades", Material.NETHER_STAR), "owner-menu.upgrades"));
         }
         if (can(Perm.BILLING)) {
-            String status = left > 0 ? "<green>" + Text.duration(left) + " left" : "<red>EXPIRED - renew now!";
-            inv.setItem(RENT, confirmingRent
-                    ? Text.glow(Text.icon(Material.CLOCK, "<yellow>Click again to confirm",
-                            "<gray>Cost: <white>" + sm.money(sm.rentPrice(prof)), "<gray>Paid from your own balance."))
-                    : Text.icon(Material.CLOCK, "<aqua>Extend Rent", "<gray>Status: " + status,
-                            "<gray>Cost: <white>" + sm.money(sm.rentPrice(prof)), "<yellow>Click to extend"));
+            String cost = sm.money(sm.rentPrice(prof));
+            Material clock = plugin.material("owner-rent", Material.CLOCK);
+            if (confirmingRent) {
+                inv.setItem(RENT, Text.glow(m.icon(clock, "owner-menu.rent-confirm", "cost", cost)));
+            } else {
+                Messages.Parsed status = left > 0
+                        ? m.ref("owner-menu.rent-status-active", "time", Text.duration(left))
+                        : m.ref("owner-menu.rent-status-expired");
+                inv.setItem(RENT, m.icon(clock, "owner-menu.rent", "status", status, "cost", cost));
+            }
         }
 
         // ---- row 2
         if (can(Perm.SALES)) {
+            Material carrot = plugin.material("owner-sale", Material.GOLDEN_CARROT);
             if (shop.isOnSale(now)) {
-                inv.setItem(SALE, Text.glow(Text.icon(Material.GOLDEN_CARROT, "<red>Sale running: <yellow>" + shop.getSalePercent() + "% off",
-                        "<gray>Ends in: <white>" + Text.duration(shop.getSaleExpiry() - now),
-                        "<gray>Listed in /shops: " + (shop.isSaleListed() ? "<green>yes" : "<red>no"),
-                        "<yellow>Click to manage")));
+                inv.setItem(SALE, Text.glow(m.icon(carrot, "owner-menu.sale-running",
+                        "percent", shop.getSalePercent(), "time", Text.duration(shop.getSaleExpiry() - now),
+                        "listed", m.ref(shop.isSaleListed() ? "misc.yes" : "misc.no"))));
             } else {
-                inv.setItem(SALE, Text.icon(Material.GOLDEN_CARROT, "<gold>Run a Sale",
-                        "<gray>Discount your money-priced trades", "<gray>for a limited time.",
-                        "<yellow>Click to set up"));
+                inv.setItem(SALE, m.icon(carrot, "owner-menu.sale"));
             }
         }
         if (can(Perm.BILLING)) {
+            Material star = plugin.material("owner-featured", Material.NETHER_STAR);
             if (shop.isFeatured(now)) {
-                inv.setItem(FEATURED, Text.glow(Text.icon(Material.NETHER_STAR, "<gold>Featured",
-                        "<gray>Pinned in /shops for: <white>" + Text.duration(shop.getFeaturedUntil() - now),
-                        "<yellow>Click to extend")));
+                inv.setItem(FEATURED, Text.glow(m.icon(star, "owner-menu.featured-active",
+                        "time", Text.duration(shop.getFeaturedUntil() - now))));
             } else {
-                inv.setItem(FEATURED, Text.icon(Material.NETHER_STAR, "<gold>Get Featured",
-                        "<gray>Pin your shop at the top of /shops.",
-                        "<gray>Slots in use: <white>" + promo.featuredInUse() + "/" + promo.maxFeaturedSlots(),
-                        "<yellow>Click to see prices"));
+                inv.setItem(FEATURED, m.icon(star, "owner-menu.featured",
+                        "used", promo.featuredInUse(), "max", promo.maxFeaturedSlots()));
             }
         }
         if (owner) {
-            inv.setItem(STAFF, Text.icon(Material.PLAYER_HEAD, "<green>Staff & Co-owners",
-                    "<gray>Let friends restock or manage", "<gray>this shop.",
-                    "<gray>Members: <white>" + shop.getStaff().size() + "/" + plugin.getStaff().maxStaff(),
-                    "<yellow>Click to manage"));
-            inv.setItem(CUSTOM, Text.icon(Material.VILLAGER_SPAWN_EGG,
-                    "<aqua><bold>Customization</bold></aqua>",
-                    "<gray>Biome: <white>" + (prof.getSkinType() != null ? prof.getSkinType() : "none"),
-                    "<gray>Outfit: <white>" + (prof.getSkinProfession() != null ? prof.getSkinProfession() : "none"),
-                    "",
-                    "<yellow>Click to customize NPC"));
+            inv.setItem(STAFF, m.icon(plugin.material("owner-staff", Material.PLAYER_HEAD), "owner-menu.staff",
+                    "count", shop.getStaff().size(), "max", plugin.getStaff().maxStaff()));
+            String none = m.raw("misc.none");
+            String biome = prof.getSkinType() != null ? skinName(Skins.Kind.TYPE, prof.getSkinType()) : none;
+            String outfit = prof.getSkinProfession() != null ? skinName(Skins.Kind.PROFESSION, prof.getSkinProfession()) : none;
+            inv.setItem(CUSTOM, m.icon(plugin.material("owner-customize", Material.VILLAGER_SPAWN_EGG), "owner-menu.customize",
+                    "biome", biome, "outfit", outfit));
         }
 
         // ---- row 3
         if (can(Perm.STATS)) {
             RatingManager.Summary rating = plugin.getRatings().summary(shop);
-            List<String> salesLore = new ArrayList<>();
-            salesLore.add(rating.count() > 0
-                    ? "<gray>Rating: " + Text.stars(rating.average()) + " <white>" + Text.oneDecimal(rating.average())
-                            + " <gray>(" + rating.count() + ")"
-                    : "<gray>Rating: <dark_gray>no ratings yet");
-            salesLore.addAll(statsLines);
-            if (owner) salesLore.add("<yellow>Click to view your sales log");
-            inv.setItem(STATS, Text.icon(Material.BOOK, "<aqua>Sales & Ratings", salesLore.toArray(new String[0])));
+            List<Component> lore = new ArrayList<>();
+            lore.add(rating.count() > 0
+                    ? m.line("owner-menu.stats.rating", "stars", Messages.parsed(Text.stars(rating.average())),
+                            "avg", Text.oneDecimal(rating.average()), "count", rating.count())
+                    : m.line("owner-menu.stats.rating-none"));
+            lore.addAll(statsLines);
+            if (owner) lore.add(m.line("owner-menu.stats.click-log"));
+            inv.setItem(STATS, m.iconPlus(plugin.material("owner-stats", Material.BOOK), "owner-menu.stats", lore));
         }
         if (owner) {
-            double refund = sm.cancelRefund(shop);
-            inv.setItem(CANCEL, confirmingCancel
-                    ? Text.glow(Text.icon(Material.TNT, "<red>Click again to CANCEL the shop",
-                            "<gray>Refund: <white>" + sm.money(refund), "<gray>Items go to /vm claim."))
-                    : Text.icon(Material.BARRIER, "<red>Cancel Shop",
-                            "<gray>Refund (50% of remaining time):", "<white>" + sm.money(refund),
-                            "<gray>Your stock is returned to you.",
-                            "<gray>Featured time and staff are lost.", "<yellow>Click to cancel"));
+            String refund = sm.money(sm.cancelRefund(shop));
+            if (confirmingCancel) {
+                inv.setItem(CANCEL, Text.glow(m.icon(plugin.material("owner-cancel-confirm", Material.TNT),
+                        "owner-menu.cancel-confirm", "refund", refund)));
+            } else {
+                int pct = (int) Math.round(plugin.getConfig().getDouble("rent.cancel-refund", 0.5) * 100);
+                inv.setItem(CANCEL, m.icon(plugin.material("owner-cancel", Material.BARRIER), "owner-menu.cancel",
+                        "refund", refund, "percent", pct));
+            }
         }
     }
 

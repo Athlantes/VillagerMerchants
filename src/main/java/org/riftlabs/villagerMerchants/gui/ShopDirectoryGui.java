@@ -17,6 +17,7 @@ import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
+import org.riftlabs.villagerMerchants.util.Messages;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.ArrayList;
@@ -36,13 +37,14 @@ public class ShopDirectoryGui implements GuiHolder {
     private static final int PER_PAGE = 45;
     private static final int PREV = 45, CATEGORY = 46, SORT = 47, SEARCH = 48, INFO = 49,
             RATING = 50, SALE = 51, CLOSE = 52, NEXT = 53;
-    private static final double[] MIN_RATINGS = {0, 3.0, 4.0, 4.5};
 
     private enum Sort {
-        RATING("Top rated"), POPULAR("Most popular"), PRICE("Price: low to high"), NAME("Owner name (A-Z)");
+        RATING("directory.sort.rating"), POPULAR("directory.sort.popular"),
+        PRICE("directory.sort.price"), NAME("directory.sort.name");
 
-        final String label;
-        Sort(String label) { this.label = label; }
+        /** Language key of the label shown on the sort button. */
+        final String key;
+        Sort(String key) { this.key = key; }
         Sort next() { return values()[(ordinal() + 1) % values().length]; }
     }
 
@@ -57,13 +59,24 @@ public class ShopDirectoryGui implements GuiHolder {
     private String categoryId;      // null = all
     private String query;           // null = no search
     private int minRatingIdx;
+    private double[] minRatings = {0};
     private boolean saleOnly;
 
     public ShopDirectoryGui(VillagerMerchants plugin, Player player) {
         this.plugin = plugin;
         this.player = player;
-        this.inv = Bukkit.createInventory(this, 54, Text.mm("<dark_gray>Shop Directory"));
+        this.minRatings = loadMinRatings();
+        this.inv = Bukkit.createInventory(this, 54, plugin.msg().get("directory.title"));
         render();
+    }
+
+    /** Rating filter steps from directory.min-rating-options (0 = "any" is always the first step). */
+    private double[] loadMinRatings() {
+        List<Double> out = new ArrayList<>();
+        out.add(0.0);
+        for (double d : plugin.getConfig().getDoubleList("directory.min-rating-options")) if (d > 0 && d <= 5) out.add(d);
+        if (out.size() == 1) { out.add(3.0); out.add(4.0); out.add(4.5); }
+        return out.stream().mapToDouble(Double::doubleValue).sorted().toArray();
     }
 
     // ---- presets used by /shops search | category | sale
@@ -113,7 +126,7 @@ public class ShopDirectoryGui implements GuiHolder {
         RatingManager rm = plugin.getRatings();
         long now = System.currentTimeMillis();
         boolean hideEmpty = plugin.getConfig().getBoolean("directory.hide-empty-shops", true);
-        double minRating = MIN_RATINGS[minRatingIdx];
+        double minRating = minRatings[minRatingIdx];
 
         matches.clear();
         List<Shop> list = new ArrayList<>();
@@ -165,6 +178,7 @@ public class ShopDirectoryGui implements GuiHolder {
     private void render() {
         inv.clear();
         bySlot.clear();
+        var m = plugin.msg();
         List<Shop> list = listing();
         int pages = Math.max(1, (int) Math.ceil(list.size() / (double) PER_PAGE));
         page = Math.max(0, Math.min(page, pages - 1));
@@ -178,66 +192,65 @@ public class ShopDirectoryGui implements GuiHolder {
             bySlot.put(i, s);
         }
 
-        ItemStack pane = Text.icon(Material.BLACK_STAINED_GLASS_PANE, " ");
+        ItemStack pane = Gui.filler(plugin);
         for (int i = 45; i < 54; i++) inv.setItem(i, pane);
-        if (page > 0) inv.setItem(PREV, Text.icon(Material.ARROW, "<yellow>Previous page"));
-        if (page + 1 < pages) inv.setItem(NEXT, Text.icon(Material.ARROW, "<yellow>Next page"));
-        inv.setItem(CLOSE, Text.icon(Material.BARRIER, "<red>Close"));
-        inv.setItem(SORT, Text.icon(Material.HOPPER, "<aqua>Sort: <white>" + sort.label, "<yellow>Click to change",
-                "<dark_gray>Featured shops always stay on top."));
+        if (page > 0) inv.setItem(PREV, Gui.previousPage(plugin));
+        if (page + 1 < pages) inv.setItem(NEXT, Gui.nextPage(plugin));
+        inv.setItem(CLOSE, Gui.close(plugin));
+        inv.setItem(SORT, m.icon(plugin.material("directory-sort", Material.HOPPER), "directory.sort-button", "sort", m.ref(sort.key)));
 
         // category
         Category cat = categoryId == null ? null : plugin.getCategories().get(categoryId);
-        inv.setItem(CATEGORY, Text.icon(cat == null ? Material.COMPASS : cat.icon(),
-                "<aqua>Category: <white>" + (cat == null ? "All" : cat.name()),
-                "<yellow>Click: next category", "<yellow>Right-click: previous"));
+        inv.setItem(CATEGORY, m.icon(cat == null ? plugin.material("directory-category-all", Material.COMPASS) : cat.icon(),
+                "directory.category", "category", cat == null ? m.ref("directory.category-all") : Messages.parsed(cat.name())));
 
         // search
         inv.setItem(SEARCH, query == null
-                ? Text.icon(Material.SPYGLASS, "<aqua>Search", "<gray>Find shops by item, enchant or owner.", "<yellow>Click, then type in chat")
-                : Text.glow(Text.icon(Material.SPYGLASS, "<aqua>Search: <white>" + Text.esc(query), "<yellow>Click: new search", "<yellow>Right-click: clear")));
+                ? m.icon(plugin.material("directory-search", Material.SPYGLASS), "directory.search")
+                : Text.glow(m.icon(plugin.material("directory-search", Material.SPYGLASS), "directory.search-active", "query", query)));
 
         // rating filter
-        double mr = MIN_RATINGS[minRatingIdx];
-        inv.setItem(RATING, Text.icon(Material.GOLD_NUGGET,
-                "<aqua>Rating: <white>" + (mr == 0 ? "any" : Text.oneDecimal(mr) + "\u2605 and up"),
-                "<yellow>Click to change", "<dark_gray>Unrated shops are hidden when set."));
+        double mr = minRatings[minRatingIdx];
+        inv.setItem(RATING, m.icon(plugin.material("directory-rating", Material.GOLD_NUGGET), "directory.rating",
+                "value", mr == 0 ? m.ref("directory.rating-any") : m.ref("directory.rating-min", "rating", Text.oneDecimal(mr))));
 
         // sale filter
         long onSale = plugin.getShopManager().allShops().stream().filter(s -> s.isOnSale(now) && s.isSaleListed() && s.isActive(now)).count();
+        Material carrot = plugin.material("directory-sale", Material.GOLDEN_CARROT);
         inv.setItem(SALE, saleOnly
-                ? Text.glow(Text.icon(Material.GOLDEN_CARROT, "<red>Only sales: <green>ON", "<gray>Shops on sale: <white>" + onSale, "<yellow>Click to turn off"))
-                : Text.icon(Material.GOLDEN_CARROT, "<aqua>Only sales: <white>off", "<gray>Shops on sale: <white>" + onSale, "<yellow>Click to turn on"));
+                ? Text.glow(m.icon(carrot, "directory.sale-on", "count", onSale))
+                : m.icon(carrot, "directory.sale-off", "count", onSale));
 
-        inv.setItem(INFO, Text.icon(Material.PAPER, "<white>Shop Directory",
-                "<gray>" + (filtersActive() ? "Matching shops: " : "Open shops: ") + "<white>" + list.size(),
-                "<gray>Page <white>" + (page + 1) + "/" + pages,
-                filtersActive() ? "<yellow>Right-click: clear all filters" : "<dark_gray>No filters active"));
+        inv.setItem(INFO, m.icon(plugin.material("directory-info", Material.PAPER),
+                filtersActive() ? "directory.info-filtered" : "directory.info",
+                "shops", list.size(), "page", page + 1, "pages", pages));
 
         if (list.isEmpty()) {
-            inv.setItem(22, filtersActive()
-                    ? Text.icon(Material.COBWEB, "<gray>No shops match", "<dark_gray>Try other words or clear the filters", "<dark_gray>(right-click the paper below).")
-                    : Text.icon(Material.COBWEB, "<gray>No open shops yet", "<dark_gray>Rent a shop NPC to be the first!"));
+            inv.setItem(22, m.icon(plugin.material("directory-empty", Material.COBWEB),
+                    filtersActive() ? "directory.empty-filtered" : "directory.empty"));
         }
     }
 
     private ItemStack entry(Shop s, long now) {
+        var m = plugin.msg();
         ShopManager sm = plugin.getShopManager();
         CategoryRegistry cats = plugin.getCategories();
         String owner = sm.ownerName(s.getOwner());
         boolean featured = s.isFeatured(now);
-        List<String> lore = new ArrayList<>();
+        String sep = m.raw("directory.entry.list-separator");
+        List<Component> lore = new ArrayList<>();
 
-        if (featured) lore.add("<gold><bold>\u2605 FEATURED</bold>");
+        if (featured) lore.add(m.line("directory.entry.featured"));
         if (s.isOnSale(now) && s.isSaleListed()) {
-            lore.add("<red><bold>ON SALE</bold> <yellow>-" + s.getSalePercent() + "% <gray>(" + Text.duration(s.getSaleExpiry() - now) + " left)");
+            lore.add(m.line("directory.entry.on-sale", "percent", s.getSalePercent(), "time", Text.duration(s.getSaleExpiry() - now)));
         }
 
         RatingManager.Summary r = plugin.getRatings().summary(s);
         lore.add(r.count() > 0
-                ? "<gray>Rating: " + Text.stars(r.average()) + " <white>" + Text.oneDecimal(r.average()) + " <gray>(" + r.count() + ")"
-                : "<gray>Rating: <dark_gray>not rated yet");
-        lore.add("<gray>Sales: <white>" + plugin.getTransactions().salesCount(s));
+                ? m.line("directory.entry.rating", "stars", Messages.parsed(Text.stars(r.average())),
+                        "avg", Text.oneDecimal(r.average()), "count", r.count())
+                : m.line("directory.entry.rating-none"));
+        lore.add(m.line("directory.entry.sales", "sales", plugin.getTransactions().salesCount(s)));
 
         int offers = 0, money = 0;
         Set<String> names = new LinkedHashSet<>();
@@ -246,67 +259,82 @@ public class ShopDirectoryGui implements GuiHolder {
             if (t.isMoney()) money++;
             names.add(Text.esc(Text.itemName(t.getResult())));
         }
-        lore.add("<gray>Offers: <white>" + offers + (money > 0 ? " <gray>(" + money + " for money)" : ""));
+        lore.add(m.line("directory.entry.offers", "offers", offers,
+                "money", money > 0 ? m.ref("directory.entry.offers-money", "money", money) : Messages.parsed("")));
 
         List<String> catNames = new ArrayList<>();
         for (String id : cats.categoriesOf(s)) {
             Category c = cats.get(id);
             if (c != null) catNames.add(c.name());
         }
-        if (!catNames.isEmpty()) lore.add("<gray>Sells: <white>" + String.join("<gray>, <white>", catNames.subList(0, Math.min(4, catNames.size())))
-                + (catNames.size() > 4 ? " <gray>+" + (catNames.size() - 4) : ""));
+        int catLimit = Math.max(1, plugin.getConfig().getInt("directory.categories-shown", 4));
+        if (!catNames.isEmpty()) {
+            int shown = Math.min(catLimit, catNames.size());
+            lore.add(m.line("directory.entry.sells", "list", Messages.parsed(String.join(sep, catNames.subList(0, shown))),
+                    "more", catNames.size() > shown ? m.ref("directory.entry.sells-more", "count", catNames.size() - shown) : Messages.parsed("")));
+        }
 
         List<Trade> hit = matches.getOrDefault(s, List.of());
+        int offerLimit = Math.max(1, plugin.getConfig().getInt("directory.matching-offers-shown", 3));
         if ((query != null || categoryId != null) && !hit.isEmpty()) {
-            lore.add("<gray>Matching offers:");
-            for (Trade t : hit.subList(0, Math.min(3, hit.size()))) lore.add(" <dark_gray>- " + offerLine(s, t, now));
-            if (hit.size() > 3) lore.add(" <dark_gray>+" + (hit.size() - 3) + " more");
+            lore.add(m.line("directory.entry.matching"));
+            for (Trade t : hit.subList(0, Math.min(offerLimit, hit.size()))) {
+                lore.add(m.line("directory.entry.matching-line", "offer", offerLine(s, t, now)));
+            }
+            if (hit.size() > offerLimit) lore.add(m.line("directory.entry.matching-more", "count", hit.size() - offerLimit));
         } else if (!names.isEmpty()) {
-            List<String> shown = new ArrayList<>(names).subList(0, Math.min(3, names.size()));
+            int itemLimit = Math.max(1, plugin.getConfig().getInt("directory.items-shown", 3));
+            List<String> shown = new ArrayList<>(names).subList(0, Math.min(itemLimit, names.size()));
             int more = names.size() - shown.size();
-            lore.add("<gray>Items: <white>" + String.join("<gray>, <white>", shown) + (more > 0 ? " <gray>+" + more + " more" : ""));
+            lore.add(m.line("directory.entry.items", "list", Messages.parsed(String.join(sep, shown)),
+                    "more", more > 0 ? m.ref("directory.entry.items-more", "count", more) : Messages.parsed("")));
         }
 
         if (plugin.getConfig().getBoolean("directory.show-coordinates", false)) {
             String[] p = s.getLocation() == null ? new String[0] : s.getLocation().split(";");
-            if (p.length == 4) lore.add("<gray>Location: <white>" + Text.esc(p[0]) + " <gray>" + p[1] + ", " + p[2] + ", " + p[3]);
+            if (p.length >= 4) {
+                try {
+                    lore.add(m.line("directory.entry.location", "world", p[0], "x", (int) Math.floor(Double.parseDouble(p[1])),
+                            "y", (int) Math.floor(Double.parseDouble(p[2])), "z", (int) Math.floor(Double.parseDouble(p[3]))));
+                } catch (NumberFormatException ignored) {}
+            }
         }
 
-        lore.add("");
+        lore.add(Component.empty());
         var tp = plugin.getTeleports();
         if (tp.enabled() && player.hasPermission("villagermerchants.shops.teleport")) {
-            lore.add("<yellow>Click to teleport");
+            lore.add(m.line("directory.entry.click-teleport"));
             if (tp.cost() > 0 && !player.hasPermission("villagermerchants.shops.bypass")) {
-                lore.add("<gray>Cost: <white>" + sm.money(tp.cost()));
+                lore.add(m.line("directory.entry.teleport-cost", "cost", sm.money(tp.cost())));
             }
         } else {
-            lore.add("<dark_gray>Teleporting is unavailable");
+            lore.add(m.line("directory.entry.teleport-unavailable"));
         }
 
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
         meta.setOwningPlayer(Bukkit.getOfflinePlayer(s.getOwner()));
-        meta.displayName(Text.item((featured ? "<gold>\u2605 " : "<gold>") + Text.esc(owner) + "'s Shop"));
-        List<Component> loreC = new ArrayList<>();
-        for (String l : lore) loreC.add(Text.item(l));
-        meta.lore(loreC);
+        meta.displayName(m.line(featured ? "directory.entry.name-featured" : "directory.entry.name", "owner", owner));
+        meta.lore(lore);
         meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
         if (featured) meta.setEnchantmentGlintOverride(true);
         head.setItemMeta(meta);
         return head;
     }
 
-    /** "2x Diamond Sword for $400 (-20%)" or "1x Mending Book for 8x Emerald". */
-    private String offerLine(Shop s, Trade t, long now) {
+    /** "2x Diamond Sword for $400 (-20%)" or "1x Mending Book for 8x Emerald" (wording from the language file). */
+    private Component offerLine(Shop s, Trade t, long now) {
+        var m = plugin.msg();
         ItemStack res = t.getResult();
-        String what = "<white>" + res.getAmount() + "x " + Text.esc(Text.itemName(res));
+        String qty = String.valueOf(res.getAmount()), item = Text.itemName(res);
         if (t.isMoney()) {
             String price = plugin.getShopManager().money(s.effectivePrice(t, now));
-            return what + " <gray>for <gold>" + Text.esc(price) + (s.isOnSale(now) ? " <red>(-" + s.getSalePercent() + "%)" : "");
+            return m.get("directory.offer-money", "qty", qty, "item", item, "price", price,
+                    "sale", s.isOnSale(now) ? m.ref("directory.offer-sale", "percent", s.getSalePercent()) : Messages.parsed(""));
         }
-        StringBuilder pay = new StringBuilder(t.getPay1().getAmount() + "x " + Text.esc(Text.itemName(t.getPay1())));
-        if (t.getPay2() != null) pay.append(" + ").append(t.getPay2().getAmount()).append("x ").append(Text.esc(Text.itemName(t.getPay2())));
-        return what + " <gray>for <white>" + pay;
+        StringBuilder pay = new StringBuilder(t.getPay1().getAmount() + "x " + Text.itemName(t.getPay1()));
+        if (t.getPay2() != null) pay.append(m.raw("directory.offer-pay-join")).append(t.getPay2().getAmount()).append("x ").append(Text.itemName(t.getPay2()));
+        return m.get("directory.offer-item", "qty", qty, "item", item, "pay", pay.toString());
     }
 
     // ------------------------------------------------------------ clicks
@@ -322,7 +350,7 @@ public class ShopDirectoryGui implements GuiHolder {
             case NEXT -> { page++; render(); }
             case SORT -> { sort = sort.next(); page = 0; render(); }
             case CATEGORY -> { cycleCategory(right ? -1 : 1); page = 0; render(); }
-            case RATING -> { minRatingIdx = (minRatingIdx + 1) % MIN_RATINGS.length; page = 0; render(); }
+            case RATING -> { minRatingIdx = (minRatingIdx + 1) % minRatings.length; page = 0; render(); }
             case SALE -> { saleOnly = !saleOnly; page = 0; render(); }
             case SEARCH -> {
                 if (right && query != null) { query = null; page = 0; render(); }
@@ -359,7 +387,7 @@ public class ShopDirectoryGui implements GuiHolder {
         later(() -> {
             player.closeInventory();
             plugin.getChatPrompts().begin(player,
-                    "<yellow>Type what you're looking for <gray>(e.g. <white>diamond sword</white>, <white>mending</white>, <white>golden carrot</white> or a player's name).",
+                    plugin.msg().get("directory.search-prompt"),
                     text -> { query = text; page = 0; render(); open(); },
                     this::open);
         });

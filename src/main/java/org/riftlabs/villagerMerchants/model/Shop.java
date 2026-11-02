@@ -39,7 +39,7 @@ public class Shop {
         this.owner = owner;
         this.rentExpiry = rentExpiry;
         this.location = location;
-        this.storage = Bukkit.createInventory(new StorageHolder(this), 54, Text.mm("<dark_gray>Shop Storage"));
+        this.storage = Bukkit.createInventory(new StorageHolder(this), 54, org.riftlabs.villagerMerchants.VillagerMerchants.getInstance().msg().get("storage.title"));
     }
 
     public UUID getId() { return id; }

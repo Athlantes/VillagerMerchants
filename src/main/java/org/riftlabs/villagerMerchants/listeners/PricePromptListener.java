@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Captures the next chat message from a shop owner as the money price of a trade ("1500", "2.5k", "cancel"). */
 public class PricePromptListener implements Listener {
-    private static final long TIMEOUT_MS = 60_000L;
+    private long timeoutMs() { return Math.max(5, plugin.getConfig().getLong("prompts.timeout-seconds", 60)) * 1000L; }
 
     public record Prompt(Shop shop, int idx, int page, long expires) {}
 
@@ -33,11 +33,10 @@ public class PricePromptListener implements Listener {
     public PricePromptListener(VillagerMerchants plugin) { this.plugin = plugin; }
 
     public void begin(Player p, Shop shop, int idx, int page) {
-        prompts.put(p.getUniqueId(), new Prompt(shop, idx, page, System.currentTimeMillis() + TIMEOUT_MS));
+        prompts.put(p.getUniqueId(), new Prompt(shop, idx, page, System.currentTimeMillis() + timeoutMs()));
         double min = plugin.getConfig().getDouble("money.min-price", 0.01);
-        p.sendMessage(Text.mm("<yellow>Type the <gold>price</gold> for this trade in chat <gray>(e.g. <white>250</white>, <white>1.5k</white>, <white>2m</white>; minimum "
-                + plugin.getShopManager().money(min) + ")."));
-        p.sendMessage(Text.mm("<gray>Type <red>cancel</red> to go back without changing anything."));
+        plugin.msg().send(p, "price-prompt.ask", "min", plugin.getShopManager().money(min));
+        plugin.msg().send(p, "price-prompt.cancel-hint", "cancel", plugin.msg().raw("prompts.cancel-word"));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -58,15 +57,15 @@ public class PricePromptListener implements Listener {
         if (!p.isOnline()) return;
         ShopManager sm = plugin.getShopManager();
         if (!sm.isLive(pr.shop()) || !pr.shop().can(p.getUniqueId(), Perm.TRADES)) {
-            p.sendMessage(Text.mm("<red>You can no longer edit that shop's trades."));
+            plugin.msg().send(p, "price-prompt.no-longer-allowed");
             return;
         }
         if (System.currentTimeMillis() > pr.expires()) {
-            p.sendMessage(Text.mm("<gray>Price entry timed out."));
+            plugin.msg().send(p, "price-prompt.timed-out");
             reopen(p, pr);
             return;
         }
-        if (text.equalsIgnoreCase("cancel")) {
+        if (text.equalsIgnoreCase(plugin.msg().raw("prompts.cancel-word"))) {
             reopen(p, pr);
             return;
         }
@@ -75,13 +74,13 @@ public class PricePromptListener implements Listener {
         double max = plugin.getConfig().getDouble("money.max-price", 1_000_000_000.0);
         OptionalDouble parsed = parse(text);
         if (parsed.isEmpty()) {
-            p.sendMessage(Text.mm("<red>That isn't a number. Try again, or type <white>cancel</white>."));
+            plugin.msg().send(p, "price-prompt.not-a-number", "cancel", plugin.msg().raw("prompts.cancel-word"));
             rearm(p, pr);
             return;
         }
         double price = Text.round2(parsed.getAsDouble());
         if (price < min || price > max) {
-            p.sendMessage(Text.mm("<red>Price must be between " + sm.money(min) + " and " + sm.money(max) + ". Try again."));
+            plugin.msg().send(p, "price-prompt.out-of-range", "min", sm.money(min), "max", sm.money(max));
             rearm(p, pr);
             return;
         }
@@ -92,12 +91,12 @@ public class PricePromptListener implements Listener {
         t.setPrice(price); // a money trade has no payment items
         pr.shop().setDirty(true);
         sm.saveShop(pr.shop());
-        p.sendMessage(Text.mm("<green>Price set to <gold>" + sm.money(price) + "</gold>."));
+        plugin.msg().send(p, "price-prompt.set", "price", sm.money(price));
         reopen(p, pr);
     }
 
     private void rearm(Player p, Prompt pr) {
-        prompts.put(p.getUniqueId(), new Prompt(pr.shop(), pr.idx(), pr.page(), System.currentTimeMillis() + TIMEOUT_MS));
+        prompts.put(p.getUniqueId(), new Prompt(pr.shop(), pr.idx(), pr.page(), System.currentTimeMillis() + timeoutMs()));
     }
 
     private void reopen(Player p, Prompt pr) {
@@ -109,10 +108,15 @@ public class PricePromptListener implements Listener {
         String s = raw.replace(",", "").replace("$", "").trim().toLowerCase(Locale.ROOT);
         if (s.isEmpty()) return OptionalDouble.empty();
         double mult = 1;
-        char last = s.charAt(s.length() - 1);
-        if (last == 'k') mult = 1_000;
-        else if (last == 'm') mult = 1_000_000;
-        else if (last == 'b') mult = 1_000_000_000;
+        String last = s.substring(s.length() - 1);
+        var shorthand = VillagerMerchants.getInstance().getConfig().getConfigurationSection("money.shorthand");
+        if (shorthand != null) {
+            for (String suffix : shorthand.getKeys(false)) {
+                if (suffix.equalsIgnoreCase(last)) { mult = shorthand.getDouble(suffix, 1); break; }
+            }
+        } else if (last.equals("k")) mult = 1_000;
+        else if (last.equals("m")) mult = 1_000_000;
+        else if (last.equals("b")) mult = 1_000_000_000;
         if (mult != 1) s = s.substring(0, s.length() - 1);
         if (!s.matches("\\d+(\\.\\d+)?|\\.\\d+")) return OptionalDouble.empty();
         try {

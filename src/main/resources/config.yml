@@ -1,5 +1,12 @@
 # VillagerMerchants configuration
-autosave-seconds: 30
+#
+# All player-facing TEXT (menus, messages, item names, lore) is in lang/<language>.yml.
+# Colors/names of name tag presets, categories and effects are in nametags.yml, categories.yml and effects.yml.
+# /vm reload applies changes (settings marked [restart] are read once at startup).
+
+language: en               # lang/<language>.yml - copy lang/en.yml to add your own translation
+
+autosave-seconds: 30       # [restart]
 
 defaults:
   unlocked-slots: 3        # trade slots every new player starts with
@@ -10,6 +17,7 @@ rent:
   grace-hours: 48          # owner can still renew / empty storage after expiry
   max-shops-per-player: 3
   cancel-refund: 0.5       # fraction of the remaining rent value refunded on cancel
+  expiry-check-seconds: 60 # [restart] how often expired rentals are checked
 
 # cost of next level = base-cost * multiplier ^ currentLevel
 upgrades:
@@ -29,20 +37,68 @@ upgrades:
     multiplier: 1.6
     per-level: 7           # extra max days of rent per level
 
-skins:                     # permanent unlocks (Plains + Unemployed are free)
+skins:                     # permanent unlocks
   type-price: 15000.0
   profession-price: 25000.0
+  free: [plains, none]     # skin ids everybody owns from the start
+  # Optional price for one specific skin (overrides type-price / profession-price):
+  # prices:
+  #   jungle: 20000.0
+  #   librarian: 40000.0
+  # Icons in the customization menu (any item material). Names are in the language file.
+  icons:
+    plains: GRASS_BLOCK
+    desert: SAND
+    jungle: JUNGLE_LOG
+    savanna: ACACIA_LOG
+    snow: SNOW_BLOCK
+    swamp: LILY_PAD
+    taiga: SPRUCE_LOG
+    none: EMERALD
+    armorer: BLAST_FURNACE
+    butcher: SMOKER
+    cartographer: CARTOGRAPHY_TABLE
+    cleric: BREWING_STAND
+    farmer: COMPOSTER
+    fisherman: BARREL
+    fletcher: FLETCHING_TABLE
+    leatherworker: CAULDRON
+    librarian: LECTERN
+    mason: STONECUTTER
+    shepherd: LOOM
+    toolsmith: SMITHING_TABLE
+    weaponsmith: GRINDSTONE
 
 npc:
   look-at-players: true
   look-radius: 6.0
   look-update-ticks: 4
 
+nametag:                   # the floating text above shop NPCs
+  height: 0.3              # blocks above the default position
+  shadowed: true
+  see-through: false
+  animation-ticks: 4       # [restart] update speed of animated tags (<anim_rainbow>)
+
+commands:
+  look-range: 6.0          # how far /vm remove, /vm sale and /vm staff look for the shop NPC you're facing
+  look-accuracy: 0.9       # 1.0 = must look dead-center, lower = more forgiving
+
+prompts:
+  timeout-seconds: 60      # chat prompts (price, search, add staff) cancel themselves after this long
+
+trading:
+  shift-click-max: 64      # how many times shift-clicking a trade buys it at once
+
 money:
   enabled: true                 # allow money-priced trades (shift-left-click "Payment 1" in the trade editor)
   token-material: EMERALD       # item shown as the price inside the trading UI (display only, never given out)
   min-price: 0.01
   max-price: 1000000000
+  shorthand:                    # suffixes accepted when typing a price: 1.5k, 2m, ...
+    k: 1000
+    m: 1000000
+    b: 1000000000
 
 notifications:
   enabled: true
@@ -52,23 +108,31 @@ notifications:
   join-summary: true            # "while you were away" recap for sellers
   join-max-lines: 5             # recent sales listed in the recap
   join-delay-ticks: 60
-  # MiniMessage. Placeholders: <buyer> <item> <qty> <price> <paid>
-  format:
-    money: "<green>[Sale] <white><buyer></white> bought <white><qty>x <item></white> for <gold><price></gold>"
-    item: "<green>[Trade] <white><buyer></white> traded <white><paid></white> for <white><qty>x <item></white>"
+  # The message texts are in the language file (notify.sale-money / notify.sale-item).
 
 log:
   retention-days: 0             # 0 = keep the transaction log forever
+  page-size: 8                  # rows per page in /vm sales, /vm purchases and /vm log
+  time-format: "MM-dd HH:mm"    # Java DateTimeFormatter pattern for the log
+  stats-days: 7                 # window of the "recent" numbers in the owner menu
 
 directory:
   hide-empty-shops: true        # only list shops that have at least one live offer
   # categories are defined in categories.yml; /shops search <item> finds shops by what they sell
   show-coordinates: false
+  min-rating-options: [3.0, 4.0, 4.5]   # steps of the rating filter ("any" is always first)
+  matching-offers-shown: 3      # offers listed per shop while searching
+  categories-shown: 4           # "Sells:" categories listed per shop
+  items-shown: 3                # "Items:" listed per shop
   teleport:
     enabled: true
     cost: 0.0                   # charged to the player, not paid to anyone
     cooldown-seconds: 60
     warmup-seconds: 3           # cancelled if the player moves
+    move-tolerance: 0.7         # blocks the player may drift during the warm-up
+    # Blocks the landing spot must not be on / next to (material names)
+    unsafe-floor: [MAGMA_BLOCK, CACTUS, CAMPFIRE, SOUL_CAMPFIRE, LAVA]
+    unsafe-air: [FIRE, SOUL_FIRE, SWEET_BERRY_BUSH, WITHER_ROSE, POWDER_SNOW, COBWEB, LAVA]
 
 ratings:
   enabled: true
@@ -76,6 +140,9 @@ ratings:
   prompt-after-purchase: true   # clickable stars in chat after closing the shop
   prompt-cooldown-minutes: 30
   show-on-nametag: true
+  ranking:                      # "Top rated" sorting: a lone 5-star vote shouldn't beat a proven 4.8 shop
+    prior-weight: 3.0           # how many "average" votes every shop starts with
+    prior-mean: 3.5             # what those votes are worth
 
 customization:
   skins-enabled: true
@@ -92,8 +159,10 @@ sales:
   fee: 0.0                      # optional fee to start a sale (withdrawn, not paid to anyone)
   percent-options: [10, 20, 30, 40, 50]            # buttons in the sale menu
   duration-options: [30, 60, 120, 360, 720, 1440]  # minutes, buttons in the sale menu
-  banner: true                  # extra name tag line while a sale runs
-  banner-format: "<red><bold>ON SALE</bold> <yellow>-<percent>%</yellow> <gray>(<time>)</gray>"
+  min-minutes: 5                # shortest sale a player can start
+  banner: true                  # extra name tag line while a sale runs (text: sale.banner in the language file)
+  banner-refresh-seconds: 60    # how often the countdown on that line updates
+  tab-complete-durations: ["30m", "1h", "2h", "6h", "12h", "1d"]   # suggestions for /vm sale start <percent> <time>
   effect: ""                    # effect id from effects.yml that overrides the owner's effect during a sale ('' = off)
 
 # ── Featured listings: owners pay to be pinned at the top of /shops ─────────────
@@ -113,3 +182,81 @@ featured:
 staff:
   enabled: true
   max-per-shop: 5
+  # What each role may do. Allowed: STORAGE, TRADES, SALES, STATS, BILLING (or ALL).
+  # The owner always can do everything; cancelling, upgrades, NPC look and staff stay owner-only.
+  roles:
+    stocker: [STORAGE]
+    manager: [STORAGE, TRADES, SALES, STATS]
+    co_owner: [ALL]
+
+promotions:
+  tick-seconds: 20              # [restart] how often sales and featured listings are checked
+
+# ── Menu icons (any item material). Titles, names and lore are in the language file. ──
+gui:
+  materials:
+    filler: BLACK_STAINED_GLASS_PANE
+    back: OAK_DOOR
+    close: BARRIER
+    previous-page: ARROW
+    next-page: ARROW
+    # rent menu
+    rent-info: PAPER
+    rent-accept: LIME_CONCRETE
+    rent-confirm: YELLOW_CONCRETE
+    rent-cancel: RED_CONCRETE
+    # owner menu
+    owner-trades: WRITABLE_BOOK
+    owner-storage: CHEST
+    owner-upgrades: NETHER_STAR
+    owner-rent: CLOCK
+    owner-sale: GOLDEN_CARROT
+    owner-featured: NETHER_STAR
+    owner-staff: PLAYER_HEAD
+    owner-customize: VILLAGER_SPAWN_EGG
+    owner-stats: BOOK
+    owner-cancel: BARRIER
+    owner-cancel-confirm: TNT
+    # upgrades
+    upgrade-slots: BARREL
+    upgrade-tax: GOLD_INGOT
+    upgrade-duration: CLOCK
+    # trade editor
+    trade-payment1: YELLOW_STAINED_GLASS_PANE
+    trade-payment2: ORANGE_STAINED_GLASS_PANE
+    trade-result: LIME_STAINED_GLASS_PANE
+    trade-locked: BARRIER
+    trade-unused: GRAY_STAINED_GLASS_PANE
+    trade-page: PAPER
+    trade-upgrades: NETHER_STAR
+    # sales menu
+    sale-info: GOLDEN_CARROT
+    sale-percent: GOLD_INGOT
+    sale-duration: CLOCK
+    sale-stop: RED_CONCRETE
+    sale-start: LIME_CONCRETE
+    sale-blocked: GRAY_CONCRETE
+    sale-listed-on: LIME_DYE
+    sale-listed-off: GRAY_DYE
+    # featured menu
+    featured-info: NETHER_STAR
+    featured-package: EMERALD
+    featured-blocked: GRAY_DYE
+    # staff menu
+    staff-roles: PAPER
+    staff-add: EMERALD
+    staff-full: GRAY_DYE
+    # customization menu
+    tab-skins: LEATHER_CHESTPLATE
+    tab-nametags: NAME_TAG
+    tab-effects: BLAZE_POWDER
+    customization-nametag: NAME_TAG
+    effect-remove: BARRIER
+    # shop directory
+    directory-sort: HOPPER
+    directory-category-all: COMPASS
+    directory-search: SPYGLASS
+    directory-rating: GOLD_NUGGET
+    directory-sale: GOLDEN_CARROT
+    directory-info: PAPER
+    directory-empty: COBWEB

@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -38,56 +39,55 @@ public class SaleGui implements GuiHolder, ShopBound {
         this.durations = promo.durationOptions().subList(0, Math.min(7, promo.durationOptions().size()));
         this.percent = percents.get(Math.min(1, percents.size() - 1));
         this.duration = durations.get(Math.min(1, durations.size() - 1));
-        this.inv = Bukkit.createInventory(this, 36, Text.mm("<dark_gray>Run a Sale"));
+        this.inv = Bukkit.createInventory(this, 36, plugin.msg().get("sale-gui.title"));
         render();
     }
 
     private void render() {
         inv.clear();
+        var m = plugin.msg();
         PromotionManager promo = plugin.getPromotions();
         long now = System.currentTimeMillis();
         boolean running = shop.isOnSale(now);
 
         int discountable = promo.discountableTrades(shop);
-        inv.setItem(INFO, Text.icon(Material.GOLDEN_CARROT, running ? "<red>Sale running" : "<gold>Run a Sale",
-                "<gray>Discounts apply to money-priced trades.",
-                "<gray>Affected trades: <white>" + discountable + "<gray>/" + shop.completeTrades().size(),
-                "<gray>A name tag banner shows while it runs."));
+        inv.setItem(INFO, m.icon(plugin.material("sale-info", Material.GOLDEN_CARROT),
+                running ? "sale-gui.info-running" : "sale-gui.info",
+                "affected", discountable, "total", shop.completeTrades().size()));
 
         if (running) {
-            inv.setItem(PERCENT_START + 2, Text.glow(Text.icon(Material.GOLD_INGOT, "<yellow>" + shop.getSalePercent() + "% off",
-                    "<gray>Ends in: <white>" + Text.duration(shop.getSaleExpiry() - now))));
-            inv.setItem(ACTION, Text.icon(Material.RED_CONCRETE, "<red>Stop the sale", "<gray>Prices go back to normal now.",
-                    "<yellow>Click to stop"));
+            inv.setItem(PERCENT_START + 2, Text.glow(m.icon(plugin.material("sale-percent", Material.GOLD_INGOT), "sale-gui.current",
+                    "percent", shop.getSalePercent(), "time", Text.duration(shop.getSaleExpiry() - now))));
+            inv.setItem(ACTION, m.icon(plugin.material("sale-stop", Material.RED_CONCRETE), "sale-gui.stop"));
         } else {
             for (int i = 0; i < percents.size(); i++) {
                 int pct = percents.get(i);
-                ItemStack it = Text.icon(Material.GOLD_INGOT, "<yellow>" + pct + "% off",
-                        pct == percent ? "<green>Selected" : "<gray>Click to select");
+                ItemStack it = m.icon(plugin.material("sale-percent", Material.GOLD_INGOT),
+                        pct == percent ? "sale-gui.percent-selected" : "sale-gui.percent", "percent", pct);
                 it.setAmount(Math.max(1, Math.min(64, pct)));
                 inv.setItem(PERCENT_START + i, pct == percent ? Text.glow(it) : it);
             }
             for (int i = 0; i < durations.size(); i++) {
                 long d = durations.get(i);
-                ItemStack it = Text.icon(Material.CLOCK, "<aqua>" + Text.duration(d),
-                        d == duration ? "<green>Selected" : "<gray>Click to select");
+                ItemStack it = m.icon(plugin.material("sale-duration", Material.CLOCK),
+                        d == duration ? "sale-gui.duration-selected" : "sale-gui.duration", "time", Text.duration(d));
                 inv.setItem(DURATION_START + i, d == duration ? Text.glow(it) : it);
             }
-            String blocker = promo.saleBlocker(shop);
+            Component blocker = promo.saleBlocker(shop);
             double fee = promo.saleFee();
             if (blocker != null) {
-                inv.setItem(ACTION, Text.icon(Material.GRAY_CONCRETE, "<gray>Can't start a sale", blocker));
+                inv.setItem(ACTION, m.iconPlus(plugin.material("sale-blocked", Material.GRAY_CONCRETE), "sale-gui.blocked", List.of(blocker)));
             } else {
-                inv.setItem(ACTION, Text.icon(Material.LIME_CONCRETE, "<green>Start: <yellow>" + percent + "% off</yellow> for <white>" + Text.duration(duration),
-                        fee > 0 ? "<gray>Fee: <white>" + plugin.getShopManager().money(fee) : "<gray>No fee.",
-                        "<yellow>Click to start"));
+                inv.setItem(ACTION, m.icon(plugin.material("sale-start", Material.LIME_CONCRETE), "sale-gui.start",
+                        "percent", percent, "time", Text.duration(duration),
+                        "fee", fee > 0 ? m.ref("sale-gui.fee", "fee", Text.esc(plugin.getShopManager().money(fee))) : m.ref("sale-gui.no-fee")));
             }
         }
 
-        inv.setItem(LISTED, Text.icon(listedNow(running) ? Material.LIME_DYE : Material.GRAY_DYE,
-                "<white>Show in /shops: " + (listedNow(running) ? "<green>ON SALE tag" : "<red>off"),
-                "<gray>Adds an ON SALE tag to your entry", "<gray>and lets players filter for sales.", "<yellow>Click to toggle"));
-        inv.setItem(BACK, Text.icon(Material.OAK_DOOR, "<red>Back"));
+        boolean on = listedNow(running);
+        inv.setItem(LISTED, m.icon(on ? plugin.material("sale-listed-on", Material.LIME_DYE) : plugin.material("sale-listed-off", Material.GRAY_DYE),
+                "sale-gui.listed", "state", m.ref(on ? "sale-gui.listed-on" : "sale-gui.listed-off")));
+        inv.setItem(BACK, Gui.back(plugin));
     }
 
     private boolean listedNow(boolean running) { return running ? shop.isSaleListed() : listed; }

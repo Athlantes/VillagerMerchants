@@ -1,6 +1,7 @@
 package org.riftlabs.villagerMerchants;
 
 import net.milkbowl.vault.economy.Economy;
+import org.bukkit.Material;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
 import org.bukkit.plugin.PluginManager;
@@ -25,6 +26,7 @@ import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.manager.TeleportManager;
 import org.riftlabs.villagerMerchants.manager.TransactionManager;
 import org.riftlabs.villagerMerchants.util.CurrencyToken;
+import org.riftlabs.villagerMerchants.util.Messages;
 
 public final class VillagerMerchants extends JavaPlugin {
 
@@ -43,11 +45,13 @@ public final class VillagerMerchants extends JavaPlugin {
     private StaffManager staff;
     private CategoryRegistry categories;
     private Economy econ;
+    private Messages messages;
 
     @Override
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        messages = new Messages(this);   // lang/<language>.yml
 
         if (!setupEconomy()) {
             getLogger().severe("Disabled: Vault (with an economy provider) was not found!");
@@ -137,11 +141,29 @@ public final class VillagerMerchants extends JavaPlugin {
         if (pm.getPermission(node) == null) pm.addPermission(new Permission(node, def));
     }
 
+    /** Reloads config.yml, the language file, effects.yml and categories.yml. */
+    public void reloadAll() {
+        reloadConfig();
+        messages.load();
+        effectManager.reload();
+        categories.load();
+    }
+
+    /** Icon material from {@code gui.materials.<key>} in config.yml, or {@code def} if unset or invalid. */
+    public Material material(String key, Material def) {
+        String raw = getConfig().getString("gui.materials." + key);
+        if (raw == null || raw.isBlank()) return def;
+        Material m = Material.matchMaterial(raw.trim());
+        return (m == null || m.isAir() || !m.isItem()) ? def : m;
+    }
+
     public void sync(Runnable r) {
         if (isEnabled()) getServer().getScheduler().runTask(this, r);
     }
 
     public static VillagerMerchants getInstance() { return instance; }
+    public Messages msg() { return messages; }
+    public Messages getMessages() { return messages; }
     public Economy getEconomy() { return econ; }
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public ShopManager getShopManager() { return shopManager; }

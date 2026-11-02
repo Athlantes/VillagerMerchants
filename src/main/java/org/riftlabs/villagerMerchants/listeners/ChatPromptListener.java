@@ -1,6 +1,7 @@
 package org.riftlabs.villagerMerchants.listeners;
 
 import io.papermc.paper.event.player.AsyncChatEvent;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -20,7 +21,7 @@ import java.util.function.Consumer;
  * player is swallowed and handed to the callback on the main thread; "cancel" calls {@code onCancel}.
  */
 public class ChatPromptListener implements Listener {
-    private static final long TIMEOUT_MS = 60_000L;
+    private long timeoutMs() { return Math.max(5, plugin.getConfig().getLong("prompts.timeout-seconds", 60)) * 1000L; }
 
     private record Prompt(Consumer<String> onInput, Runnable onCancel, long expires) {}
 
@@ -29,11 +30,11 @@ public class ChatPromptListener implements Listener {
 
     public ChatPromptListener(VillagerMerchants plugin) { this.plugin = plugin; }
 
-    /** @param message MiniMessage shown to the player; the "type cancel" hint is added automatically. */
-    public void begin(Player p, String message, Consumer<String> onInput, Runnable onCancel) {
-        prompts.put(p.getUniqueId(), new Prompt(onInput, onCancel, System.currentTimeMillis() + TIMEOUT_MS));
-        p.sendMessage(Text.mm(message));
-        p.sendMessage(Text.mm("<gray>Type <red>cancel</red> to go back."));
+    /** @param message shown to the player; the "type cancel" hint is added automatically. */
+    public void begin(Player p, Component message, Consumer<String> onInput, Runnable onCancel) {
+        prompts.put(p.getUniqueId(), new Prompt(onInput, onCancel, System.currentTimeMillis() + timeoutMs()));
+        p.sendMessage(message);
+        plugin.msg().send(p, "prompts.cancel-hint", "cancel", plugin.msg().raw("prompts.cancel-word"));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
@@ -46,9 +47,9 @@ public class ChatPromptListener implements Listener {
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!prompts.remove(p.getUniqueId(), pr) || !p.isOnline()) return;
             if (System.currentTimeMillis() > pr.expires()) {
-                p.sendMessage(Text.mm("<gray>That prompt timed out."));
+                plugin.msg().send(p, "prompts.timed-out");
                 pr.onCancel().run();
-            } else if (text.equalsIgnoreCase("cancel") || text.isEmpty()) {
+            } else if (text.equalsIgnoreCase(plugin.msg().raw("prompts.cancel-word")) || text.isEmpty()) {
                 pr.onCancel().run();
             } else {
                 pr.onInput().accept(text);

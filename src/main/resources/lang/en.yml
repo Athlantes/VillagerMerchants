@@ -1,0 +1,816 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  VillagerMerchants - English language file
+# ═══════════════════════════════════════════════════════════════════════════════
+#  * Every player-facing text of the plugin lives here, written in MiniMessage:
+#    https://docs.advntr.dev/minimessage/format.html
+#  * <placeholders> are filled in by the plugin. Keep the ones that appear in a
+#    line (you may move or drop them). Unknown tags are shown as plain text.
+#  * <prefix> expands to the "prefix" entry below (empty by default).
+#  * To translate: copy this file to lang/<code>.yml (e.g. lang/de.yml), edit it and
+#    set  language: <code>  in config.yml, then /vm reload. Keys you leave out fall
+#    back to this English text.
+#  * Entries ending in ".name" / ".lore" are item names / item lore. Lore is a list;
+#    use "" for an empty line.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Put something like "<dark_gray>[<gold>Shops</gold>]</dark_gray> " here to prefix chat messages.
+prefix: ""
+
+# ───────────────────────────── generic words ─────────────────────────────
+misc:
+  nothing: "nothing"
+  unknown: "Unknown"
+  unknown-short: "?"
+  someone: "Someone"
+  item: "item"
+  none: "none"
+  "yes": "<green>yes"
+  "no": "<red>no"
+  free: "Free"
+  players-only: "<prefix><red>Players only."
+  no-permission: "<prefix><red>No permission."
+
+time:
+  expired: "expired"
+  days-hours: "<days>d <hours>h"
+  hours-minutes: "<hours>h <minutes>m"
+  minutes: "<minutes>m"
+
+money:
+  fallback: "$<amount>"        # used only if the economy plugin can't format money
+
+stars:
+  filled: "★"
+  empty: "☆"
+  format: "<yellow><filled><dark_gray><empty>"
+
+economy:
+  not-enough: "<prefix><red>You need <amount> for that."
+  payment-failed: "<prefix><red>The payment failed."
+
+token:                         # the "price" item shown inside the trading window
+  name: "<gold><price>"
+  lore:
+    - "<gray>Paid straight from your balance."
+    - "<dark_gray>Display item - not a real item."
+
+storage:
+  title: "<dark_gray>Shop Storage"
+
+# ───────────────────────────── shared menu buttons ─────────────────────────────
+gui:
+  back:
+    name: "<red>Back"
+  close:
+    name: "<red>Close"
+  cancel:
+    name: "<red>Cancel"
+  confirm:
+    name: "<yellow>Click again to confirm"
+  previous-page:
+    name: "<yellow>Previous page"
+  next-page:
+    name: "<yellow>Next page"
+  previous-page-numbered:
+    name: "<yellow>Previous Page"
+    lore:
+      - "<gray>Page <page> / <pages>"
+  next-page-numbered:
+    name: "<yellow>Next Page"
+    lore:
+      - "<gray>Page <page> / <pages>"
+
+# ───────────────────────────── NPC name tags ─────────────────────────────
+nametag:
+  available: "<green><bold>Available Shop</bold></green>"
+  closed: "<gray>Closed Shop</gray>"
+  owner-line: "<owner>'s<br>"            # inserted after the first <bold> of the equipped name tag
+  preview-owner: "<owner>'s "            # same, in the customization menu preview
+  replace-from: "Available Shop"         # text replaced in rented shops' name tags...
+  replace-to: "Shop"                     # ...with this
+  rating-suffix: " <yellow>★<rating>"
+  fallback-format: "<white><bold>Shop</bold></white>"
+
+# ───────────────────────────── renting ─────────────────────────────
+shop:
+  rent:
+    taken: "<prefix><red>This shop was just rented by someone else."
+    max-shops: "<prefix><red>You have reached the maximum number of shops (<max>)."
+    success: "<prefix><green>Shop rented for <days> days! Right-click it to manage it."
+    no-permission: "<prefix><red>You can't pay rent for this shop."
+    too-far: "<prefix><red>You can't rent further ahead. Upgrade your max rent duration!"
+    extended: "<prefix><green>Rent extended by <days> days."
+  released: "<prefix><yellow>Your shop has been released. Use <gold>/vm claim</gold> to retrieve leftover items."
+  claim:
+    nothing: "<prefix><gray>You have nothing to claim."
+    done: "<prefix><green>Claimed <count> items."
+  cancelled: "<prefix><green>Shop cancelled."
+  cancelled-refund: "<prefix><green>Shop cancelled. Refunded <refund>."
+
+rent-gui:
+  title: "<dark_gray>Rent this shop?"
+  info:
+    name: "<gold>Rent Cost: <cost>"
+    lore:
+      - "<gray>Duration: <white><days> days"
+      - "<gray>Trade slots: <white><slots>"
+      - "<gray>Rent discount: <white><discount>%"
+  accept:
+    name: "<green>Rent Shop"
+
+# ───────────────────────────── upgrades ─────────────────────────────
+upgrade:
+  title: "<dark_gray>Upgrades"
+  maxed: "<prefix><red>That upgrade is already maxed."
+  purchased: "<prefix><green>Upgrade purchased!"
+  types:
+    slots:
+      name: "Trade Slots"
+      current: "<slots> slots"
+      gain: "+<amount> slot"
+    tax:
+      name: "Rent Discount"
+      current: "<percent>% off rent"
+      gain: "+<percent>% off"
+    duration:
+      name: "Max Rent Duration"
+      current: "<days> days"
+      gain: "+<days> days"
+  item:
+    maxed:
+      name: "<gold><name> <green>(MAX)"
+      lore:
+        - "<gray>Current: <white><current>"
+    confirm:
+      name: "<yellow>Click again to confirm"
+      lore:
+        - "<gray><gain> for <white><cost>"
+    buy:
+      name: "<gold><name>"
+      lore:
+        - "<gray>Level: <white><level>/<max>"
+        - "<gray>Current: <white><current>"
+        - "<gray>Next: <green><gain>"
+        - "<gray>Cost: <white><cost>"
+        - "<yellow>Click to buy"
+
+# ───────────────────────────── owner / staff menu ─────────────────────────────
+roles:
+  owner: "Owner"
+  unknown: "?"
+  stocker: "Stocker"
+  manager: "Manager"
+  co_owner: "Co-owner"
+
+owner-menu:
+  title-owner: "<dark_gray>Manage your shop"
+  title-staff: "<dark_gray>Manage shop (staff)"
+  head:
+    name: "<gold><owner>'s Shop"
+    lore:
+      - "<gray>Your role: <white><role>"
+      - "<gray>Staff: <white><staff>"
+  trades:
+    name: "<green>Edit Trades"
+    lore:
+      - "<gray>Active trades: <white><active>/<slots>"
+      - "<yellow>Click to open"
+  storage:
+    name: "<gold>Storage"
+    lore:
+      - "<gray>Stock the items you sell here."
+      - "<gray>Customer payments land here too."
+      - "<yellow>Click to open"
+  upgrades:
+    name: "<light_purple>Upgrades"
+    lore:
+      - "<gray>Permanent: they stay with you"
+      - "<gray>between rentals."
+      - "<yellow>Click to open"
+  rent-status-active: "<green><time> left"
+  rent-status-expired: "<red>EXPIRED - renew now!"
+  rent:
+    name: "<aqua>Extend Rent"
+    lore:
+      - "<gray>Status: <status>"
+      - "<gray>Cost: <white><cost>"
+      - "<yellow>Click to extend"
+  rent-confirm:
+    name: "<yellow>Click again to confirm"
+    lore:
+      - "<gray>Cost: <white><cost>"
+      - "<gray>Paid from your own balance."
+  sale:
+    name: "<gold>Run a Sale"
+    lore:
+      - "<gray>Discount your money-priced trades"
+      - "<gray>for a limited time."
+      - "<yellow>Click to set up"
+  sale-running:
+    name: "<red>Sale running: <yellow><percent>% off"
+    lore:
+      - "<gray>Ends in: <white><time>"
+      - "<gray>Listed in /shops: <listed>"
+      - "<yellow>Click to manage"
+  featured:
+    name: "<gold>Get Featured"
+    lore:
+      - "<gray>Pin your shop at the top of /shops."
+      - "<gray>Slots in use: <white><used>/<max>"
+      - "<yellow>Click to see prices"
+  featured-active:
+    name: "<gold>Featured"
+    lore:
+      - "<gray>Pinned in /shops for: <white><time>"
+      - "<yellow>Click to extend"
+  staff:
+    name: "<green>Staff & Co-owners"
+    lore:
+      - "<gray>Let friends restock or manage"
+      - "<gray>this shop."
+      - "<gray>Members: <white><count>/<max>"
+      - "<yellow>Click to manage"
+  customize:
+    name: "<aqua><bold>Customization</bold></aqua>"
+    lore:
+      - "<gray>Biome: <white><biome>"
+      - "<gray>Outfit: <white><outfit>"
+      - ""
+      - "<yellow>Click to customize NPC"
+  stats:
+    name: "<aqua>Sales & Ratings"
+    loading:
+      - "<gray>Sales (recent): <dark_gray>loading..."
+    recent: "<gray>Last <days> days: <white><sales> <gray>sale(s), <gold><money>"
+    total: "<gray>All time: <white><sales> <gray>sale(s), <gold><money>"
+    rating: "<gray>Rating: <stars> <white><avg> <gray>(<count>)"
+    rating-none: "<gray>Rating: <dark_gray>no ratings yet"
+    click-log: "<yellow>Click to view your sales log"
+  cancel:
+    name: "<red>Cancel Shop"
+    lore:
+      - "<gray>Refund (<percent>% of remaining time):"
+      - "<white><refund>"
+      - "<gray>Your stock is returned to you."
+      - "<gray>Featured time and staff are lost."
+      - "<yellow>Click to cancel"
+  cancel-confirm:
+    name: "<red>Click again to CANCEL the shop"
+    lore:
+      - "<gray>Refund: <white><refund>"
+      - "<gray>Items go to /vm claim."
+
+# ───────────────────────────── trade editor ─────────────────────────────
+trade-editor:
+  title: "<dark_gray>Edit Trades"
+  payment1:
+    name: "<yellow>Payment 1"
+    lore:
+      - "<gray>Hold an item and click to set."
+  payment1-money:
+    name: "<yellow>Payment 1"
+    lore:
+      - "<gray>Hold an item and click to set."
+      - "<gray>Or <white>shift-left-click</white> with an empty hand"
+      - "<gray>to charge money instead."
+  payment2:
+    name: "<gold>Payment 2 <gray>(optional)"
+    lore:
+      - "<gray>Hold an item and click to set."
+  result:
+    name: "<green>Result"
+    lore:
+      - "<gray>What the customer receives."
+  locked:
+    name: "<red>Locked slot"
+    lore:
+      - "<gray>Buy more in Upgrades."
+  price:
+    name: "<gold>Price: <price>"
+    lore:
+      - "<gray>Customers pay this from their balance."
+      - "<yellow>Shift-left-click: change price"
+      - "<yellow>Left-click: remove price"
+  unused:
+    name: "<gray>Not used"
+    lore:
+      - "<dark_gray>Money trades have a single price."
+      - "<dark_gray>Remove the price to use items again."
+  page:
+    name: "<white>Page <page>/<pages>"
+    lore:
+      - "<gray>Left-click: clear slot"
+      - "<gray>Right-click: amount +1"
+      - "<gray>Shift-right: amount -1"
+      - "<gray>Only trades with a payment (items or a money"
+      - "<gray>price) and a Result are live."
+  upgrades:
+    name: "<light_purple>Upgrades"
+
+trade:
+  price-label: "<price>"                       # price shown on money trades in the trading window
+  price-label-sale: "<price> (-<percent>%)"
+
+price-prompt:
+  ask: "<prefix><yellow>Type the <gold>price</gold> for this trade in chat <gray>(e.g. <white>250</white>, <white>1.5k</white>, <white>2m</white>; minimum <min>)."
+  cancel-hint: "<prefix><gray>Type <red><cancel></red> to go back without changing anything."
+  no-longer-allowed: "<prefix><red>You can no longer edit that shop's trades."
+  timed-out: "<prefix><gray>Price entry timed out."
+  not-a-number: "<prefix><red>That isn't a number. Try again, or type <white><cancel></white>."
+  out-of-range: "<prefix><red>Price must be between <min> and <max>. Try again."
+  set: "<prefix><green>Price set to <gold><price></gold>."
+
+prompts:                                       # chat prompts (prices, searches, staff names)
+  cancel-word: "cancel"                        # the word players type to abort a prompt
+  cancel-hint: "<prefix><gray>Type <red><cancel></red> to go back."
+  timed-out: "<prefix><gray>That prompt timed out."
+
+# ───────────────────────────── customers ─────────────────────────────
+customer:
+  title: "<dark_gray><owner>'s Shop"
+  title-rated: "<dark_gray><owner>'s Shop <gold>★<rating>"
+  nothing-for-sale: "<prefix><gray>This shop has nothing for sale yet."
+  shop-closed: "<prefix><gray>This shop is closed."
+  preview-mode: "<prefix><yellow>Preview mode: you can't buy from a shop you own or work at."
+  shop-updated: "<prefix><yellow>The shop was updated. Please reopen it."
+  prices-changed: "<prefix><yellow>This shop's prices just changed. Please reopen it."
+  error:
+    out-of-stock: "<prefix><red>This item is out of stock."
+    inventory-full: "<prefix><red>Your inventory is full."
+    cannot-buy: "<prefix><red>You can't buy that right now."
+    seller-cannot-receive: "<prefix><red>The seller can't receive payment right now. You were not charged."
+    missing-items: "<prefix><red>You don't have the required items."
+    storage-full: "<prefix><red>The shop's storage is full."
+
+# ───────────────────────────── sales ─────────────────────────────
+sale:
+  banner: "<red><bold>ON SALE</bold> <yellow>-<percent>%</yellow> <gray>(<time>)</gray>"   # extra name tag line while a sale runs
+  no-permission: "<prefix><red>You can't run sales for this shop."
+  invalid-percent: "<prefix><red>The discount must be between <min>% and <max>%."
+  invalid-duration: "<prefix><red>A sale must last between <min> and <max>."
+  started: "<prefix><green>Sale started: <yellow><percent>% off</yellow> for <white><time></white><fee>.<listed>"
+  started-fee: " <gray>(fee <fee>)"
+  started-listed: " <gray>It's tagged ON SALE in /shops."
+  none-running: "<prefix><gray>There's no sale running."
+  stopped: "<prefix><yellow>Sale stopped."
+  ended: "<prefix><yellow>Your shop sale has ended. Prices are back to normal."
+  blocker:
+    disabled: "<red>Sales are disabled on this server."
+    rent-expired: "<red>Renew your rent before running a sale."
+    running: "<red>A sale is already running. Stop it first."
+    no-money-trades: "<red>Sales only discount money-priced trades. Add one first (shift-left-click Payment 1 in the trade editor)."
+    cooldown: "<red>You can run another sale in <time>."
+
+sale-gui:
+  title: "<dark_gray>Run a Sale"
+  info:
+    name: "<gold>Run a Sale"
+    lore:
+      - "<gray>Discounts apply to money-priced trades."
+      - "<gray>Affected trades: <white><affected><gray>/<total>"
+      - "<gray>A name tag banner shows while it runs."
+  info-running:
+    name: "<red>Sale running"
+    lore:
+      - "<gray>Discounts apply to money-priced trades."
+      - "<gray>Affected trades: <white><affected><gray>/<total>"
+      - "<gray>A name tag banner shows while it runs."
+  current:
+    name: "<yellow><percent>% off"
+    lore:
+      - "<gray>Ends in: <white><time>"
+  stop:
+    name: "<red>Stop the sale"
+    lore:
+      - "<gray>Prices go back to normal now."
+      - "<yellow>Click to stop"
+  percent:
+    name: "<yellow><percent>% off"
+    lore:
+      - "<gray>Click to select"
+  percent-selected:
+    name: "<yellow><percent>% off"
+    lore:
+      - "<green>Selected"
+  duration:
+    name: "<aqua><time>"
+    lore:
+      - "<gray>Click to select"
+  duration-selected:
+    name: "<aqua><time>"
+    lore:
+      - "<green>Selected"
+  blocked:
+    name: "<gray>Can't start a sale"       # the reason is added below
+  start:
+    name: "<green>Start: <yellow><percent>% off</yellow> for <white><time>"
+    lore:
+      - "<fee>"
+      - "<yellow>Click to start"
+  fee: "<gray>Fee: <white><fee>"
+  no-fee: "<gray>No fee."
+  listed:
+    name: "<white>Show in /shops: <state>"
+    lore:
+      - "<gray>Adds an ON SALE tag to your entry"
+      - "<gray>and lets players filter for sales."
+      - "<yellow>Click to toggle"
+  listed-on: "<green>ON SALE tag"
+  listed-off: "<red>off"
+
+# ───────────────────────────── featured listings ─────────────────────────────
+featured:
+  no-permission: "<prefix><red>You can't buy promotions for this shop."
+  bought: "<prefix><green>Featured for <white><hours>h</white> more! Pinned at the top of /shops for another <white><time></white>."
+  expired: "<prefix><yellow>Your shop's featured listing has expired."
+  blocker:
+    disabled: "<red>Featured listings are disabled on this server."
+    rent-expired: "<red>Renew your rent before promoting this shop."
+    no-offers: "<red>Add at least one live offer before promoting this shop."
+    slots-full: "<red>All <slots> featured slots are taken. Next one frees in <time>."
+    too-far: "<red>You can't be featured more than <hours>h ahead."
+
+featured-gui:
+  title: "<dark_gray>Featured Listing"
+  info:
+    name: "<gold>Not featured"
+    lore:
+      - "<gray>Pin your shop above all others in /shops."
+      - "<gray>Slots in use: <white><used>/<max>"
+      - "<dark_gray>Time keeps running while your rent is expired."
+  info-active:
+    name: "<gold>Featured"
+    lore:
+      - "<gray>Time left: <white><time>"
+      - "<gray>Slots in use: <white><used>/<max>"
+      - "<dark_gray>Time keeps running while your rent is expired."
+  package:
+    name: "<yellow><hours> hours"
+    lore:
+      - "<gray>Price: <white><price>"
+      - "<note>"
+      - "<yellow>Click to buy"
+  package-blocked:
+    name: "<yellow><hours> hours"
+    lore:
+      - "<gray>Price: <white><price>"
+  package-confirm:
+    name: "<green>Click again to buy"
+    lore:
+      - "<gray><hours>h for <white><price>"
+      - "<gray>Paid from your own balance."
+  note-extend: "<gray>Adds to your remaining time."
+  note-start: "<gray>Starts right away."
+
+# ───────────────────────────── staff ─────────────────────────────
+staff:
+  error:
+    disabled: "<prefix><red>Shop staff is disabled on this server."
+    owner-only: "<prefix><red>Only the shop owner can manage staff."
+    no-permission: "<prefix><red>You don't have permission to hire staff."
+    self: "<prefix><red>That's you - you already own this shop."
+    already-staff: "<prefix><red><player> is already on your staff. Change their role instead."
+    full: "<prefix><red>You can have at most <max> staff members per shop."
+    not-staff: "<prefix><red>That player isn't on your staff."
+  notice:
+    added: "<prefix><green><actor> made you <yellow><role></yellow> of their shop. Right-click the shop villager to work there."
+    removed: "<prefix><yellow>You are no longer staff at <owner>'s shop."
+    role-changed: "<prefix><yellow>Your role at <owner>'s shop is now <gold><role></gold>."
+
+staff-gui:
+  title: "<dark_gray>Staff & Co-owners"
+  prompt: "<prefix><yellow>Type the <gold>name</gold> of the player to add as staff <gray>(they must have joined before; new staff start as <role>)."
+  unknown-player: "<prefix><red>I don't know a player called <white><name></white>."
+  added: "<prefix><green>Added <white><name></white> as <role>. Click their head to promote them."
+  member:
+    name: "<white><name>"
+    lore:
+      - "<gray>Role: <gold><role>"
+      - "<description>"
+      - ""
+      - "<yellow>Click: change role"
+      - "<red>Shift-click: remove"
+  role-description:
+    stocker: "<dark_gray>Storage"
+    manager: "<dark_gray>Storage, trades, sales, stats"
+    co_owner: "<dark_gray>Everything except owner-only actions"
+  roles:
+    name: "<white>Roles"
+    lore:
+      - "<gold><stocker><gray>: storage only (can also take payments)"
+      - "<gold><manager><gray>: + trades, prices, sales, stats"
+      - "<gold><co_owner><gray>: + pay rent, featured listings"
+      - "<dark_gray>Owner-only: cancel, upgrades, NPC look, staff"
+  full:
+    name: "<gray>Staff list is full"
+    lore:
+      - "<gray>Maximum: <white><max>"
+  add:
+    name: "<green>Add staff"
+    lore:
+      - "<gray>Members: <white><count>/<max>"
+      - "<yellow>Click, then type a player name in chat"
+
+# ───────────────────────────── customization ─────────────────────────────
+skins:
+  unlocked: "<prefix><green>Unlocked the <gold><skin></gold> skin permanently!"
+  type:
+    plains: "Plains"
+    desert: "Desert"
+    jungle: "Jungle"
+    savanna: "Savanna"
+    snow: "Snow"
+    swamp: "Swamp"
+    taiga: "Taiga"
+  profession:
+    none: "Unemployed"
+    armorer: "Armorer"
+    butcher: "Butcher"
+    cartographer: "Cartographer"
+    cleric: "Cleric"
+    farmer: "Farmer"
+    fisherman: "Fisherman"
+    fletcher: "Fletcher"
+    leatherworker: "Leatherworker"
+    librarian: "Librarian"
+    mason: "Mason"
+    shepherd: "Shepherd"
+    toolsmith: "Toolsmith"
+    weaponsmith: "Weaponsmith"
+
+custom-gui:
+  title: "<dark_gray>Shop Customization"
+  tab-skins:
+    name: "<gray>Skins"
+    lore:
+      - "<yellow>Click to view outfit upgrades"
+  tab-skins-active:
+    name: "<green>▶ Skins"
+    lore:
+      - "<yellow>Click to view outfit upgrades"
+  tab-nametags:
+    name: "<gray>Nametags"
+    lore:
+      - "<yellow>Click to view hologram upgrades"
+  tab-nametags-active:
+    name: "<green>▶ Nametags"
+    lore:
+      - "<yellow>Click to view hologram upgrades"
+  tab-effects:
+    name: "<gray>Effects"
+    lore:
+      - "<yellow>Click to view particle upgrades"
+  tab-effects-active:
+    name: "<green>▶ Effects"
+    lore:
+      - "<yellow>Click to view particle upgrades"
+  price: "<gray>Price: <white><price>"
+  status:
+    equipped: "<green>✔ Currently Equipped"
+    click-equip: "<yellow>Click to equip!"
+    click-confirm: "<yellow>Click again to confirm purchase!"
+    click-buy: "<yellow>Click to purchase."
+    locked: "<red>✘ Locked (missing permission)"
+  effect-description-line: "<gray><line>"
+  effect-preview-hint: "<dark_gray>Right-click to preview"
+  effect-remove:
+    name: "<red>Remove Effect"
+    lore:
+      - "<gray>Disable particles on this shop"
+  effect-previewing: "<prefix><gray>Previewing </gray><effect><gray> for <seconds> seconds..."
+  effect-no-access: "<prefix><red>You don't have access to this effect."
+  purchased: "<prefix><green>Purchased and applied: </green><name>"
+  skin-equipped:
+    name: "<green><skin> <gray>(equipped)"
+  skin-owned:
+    name: "<white><skin>"
+    lore:
+      - "<yellow>Click to equip"
+  skin-confirm:
+    name: "<yellow>Click again to confirm"
+    lore:
+      - "<gray><skin> for <white><price>"
+  skin-locked:
+    name: "<red><skin> <gray>(locked)"
+    lore:
+      - "<gray>Price: <white><price>"
+      - "<yellow>Click to buy"
+
+# ───────────────────────────── shop directory (/shops) ─────────────────────────────
+directory:
+  title: "<dark_gray>Shop Directory"
+  sort:                                         # labels cycled by the sort button
+    rating: "Top rated"
+    popular: "Most popular"
+    price: "Price: low to high"
+    name: "Owner name (A-Z)"
+  sort-button:
+    name: "<aqua>Sort: <white><sort>"
+    lore:
+      - "<yellow>Click to change"
+      - "<dark_gray>Featured shops always stay on top."
+  category-all: "All"
+  category:
+    name: "<aqua>Category: <white><category>"
+    lore:
+      - "<yellow>Click: next category"
+      - "<yellow>Right-click: previous"
+  search:
+    name: "<aqua>Search"
+    lore:
+      - "<gray>Find shops by item, enchant or owner."
+      - "<yellow>Click, then type in chat"
+  search-active:
+    name: "<aqua>Search: <white><query>"
+    lore:
+      - "<yellow>Click: new search"
+      - "<yellow>Right-click: clear"
+  search-prompt: "<prefix><yellow>Type what you're looking for <gray>(e.g. <white>diamond sword</white>, <white>mending</white>, <white>golden carrot</white> or a player's name)."
+  rating-any: "any"
+  rating-min: "<rating>★ and up"
+  rating:
+    name: "<aqua>Rating: <white><value>"
+    lore:
+      - "<yellow>Click to change"
+      - "<dark_gray>Unrated shops are hidden when set."
+  sale-on:
+    name: "<red>Only sales: <green>ON"
+    lore:
+      - "<gray>Shops on sale: <white><count>"
+      - "<yellow>Click to turn off"
+  sale-off:
+    name: "<aqua>Only sales: <white>off"
+    lore:
+      - "<gray>Shops on sale: <white><count>"
+      - "<yellow>Click to turn on"
+  info:
+    name: "<white>Shop Directory"
+    lore:
+      - "<gray>Open shops: <white><shops>"
+      - "<gray>Page <white><page>/<pages>"
+      - "<dark_gray>No filters active"
+  info-filtered:
+    name: "<white>Shop Directory"
+    lore:
+      - "<gray>Matching shops: <white><shops>"
+      - "<gray>Page <white><page>/<pages>"
+      - "<yellow>Right-click: clear all filters"
+  empty:
+    name: "<gray>No open shops yet"
+    lore:
+      - "<dark_gray>Rent a shop NPC to be the first!"
+  empty-filtered:
+    name: "<gray>No shops match"
+    lore:
+      - "<dark_gray>Try other words or clear the filters"
+      - "<dark_gray>(right-click the paper below)."
+  offer-money: "<white><qty>x <item> <gray>for <gold><price><sale>"
+  offer-sale: " <red>(-<percent>%)"
+  offer-item: "<white><qty>x <item> <gray>for <white><pay>"
+  offer-pay-join: " + "
+  entry:
+    name: "<gold><owner>'s Shop"
+    name-featured: "<gold>★ <owner>'s Shop"
+    featured: "<gold><bold>★ FEATURED</bold>"
+    on-sale: "<red><bold>ON SALE</bold> <yellow>-<percent>% <gray>(<time> left)"
+    rating: "<gray>Rating: <stars> <white><avg> <gray>(<count>)"
+    rating-none: "<gray>Rating: <dark_gray>not rated yet"
+    sales: "<gray>Sales: <white><sales>"
+    offers: "<gray>Offers: <white><offers><money>"
+    offers-money: " <gray>(<money> for money)"
+    list-separator: "<gray>, <white>"
+    sells: "<gray>Sells: <white><list><more>"
+    sells-more: " <gray>+<count>"
+    matching: "<gray>Matching offers:"
+    matching-line: " <dark_gray>- <offer>"
+    matching-more: " <dark_gray>+<count> more"
+    items: "<gray>Items: <white><list><more>"
+    items-more: " <gray>+<count> more"
+    location: "<gray>Location: <white><world> <gray><x>, <y>, <z>"
+    click-teleport: "<yellow>Click to teleport"
+    teleport-cost: "<gray>Cost: <white><cost>"
+    teleport-unavailable: "<dark_gray>Teleporting is unavailable"
+
+teleport:
+  disabled: "<prefix><red>Shop teleporting is disabled."
+  no-permission: "<prefix><red>You don't have permission to teleport to shops."
+  shop-closed: "<prefix><red>That shop is closed."
+  no-location: "<prefix><red>That shop's location isn't available right now."
+  cooldown: "<prefix><red>Please wait <seconds>s before teleporting again."
+  need-money: "<prefix><red>You need <amount> to teleport."
+  warmup: "<prefix><yellow>Teleporting in <seconds> seconds. Don't move!"
+  cancelled-moved: "<prefix><red>Teleport cancelled because you moved."
+  load-failed: "<prefix><red>Couldn't load that area. Try again."
+  closed-while-waiting: "<prefix><red>That shop closed while you were waiting."
+  no-safe-spot: "<prefix><red>Couldn't find a safe spot next to that shop."
+  welcome: "<prefix><green>Welcome to <gold><owner>'s Shop</gold>!<cost>"
+  welcome-cost: " <gray>(-<cost>)"
+  failed: "<prefix><red>The teleport failed."
+
+# ───────────────────────────── ratings ─────────────────────────────
+ratings:
+  disabled: "<prefix><red>Ratings are disabled on this server."
+  pick-stars: "<prefix><red>Pick between 1 and 5 stars."
+  shop-closed: "<prefix><red>That shop isn't open any more."
+  own-shop: "<prefix><red>You can't rate a shop you own or work at."
+  need-purchase: "<prefix><red>Buy something from this shop before rating it."
+  thanks: "<prefix><green>Thanks for rating! You gave <yellow><stars>★</yellow>."
+  updated: "<prefix><green>Updated your rating to <yellow><stars>★</yellow>."
+  received: "<prefix><yellow><who></yellow> rated your shop <yellow><stars>★</yellow> <gray>(avg <avg>, <count> rating(s))"
+  prompt: "<prefix><gold>Enjoyed shopping at <white><owner>'s</white> shop? Rate it: <stars>"
+  prompt-star: "<click:run_command:'/vm rate <shop> <n>'><hover:show_text:'Rate <n> out of 5'><yellow><stars></yellow></hover></click> "
+
+# ───────────────────────────── seller notifications ─────────────────────────────
+# Placeholders: <buyer> <item> <qty> <price> <paid>
+notify:
+  sale-money: "<green>[Sale] <white><buyer></white> bought <white><qty>x <item></white> for <gold><price></gold>"
+  sale-item: "<green>[Trade] <white><buyer></white> traded <white><paid></white> for <white><qty>x <item></white>"
+
+join:
+  header: "<gold>--- <yellow>While you were away</yellow> ---"
+  summary: "<green><sales> sale(s)</green><earned>"
+  earned: " <gray>and earned <gold><money></gold>"
+  more: "<gray>...and more. Use <yellow>/vm sales</yellow> for the full log."
+
+# ───────────────────────────── transaction log ─────────────────────────────
+history:
+  empty: "<gray>No transactions yet."
+  title-sales: "Your sales"
+  title-purchases: "Your purchases"
+  title-both: "Log: <player>"
+  header: "<gold>--- <yellow><title></yellow> <gray>(page <page>/<pages>)</gray> ---"
+  summary-sales: "<gray>All time: <white><sales></white> sale(s), earned <gold><money></gold>"
+  summary-purchases: "<gray>All time: <white><sales></white> purchase(s), spent <gold><money></gold>"
+  summary-both: "<gray>All time: <white><sales></white> trade(s) involving this player"
+  line-money: "<dark_gray><time> <white><buyer></white> <gray>bought</gray> <white><qty>x <item></white> <gray>for</gray> <gold><price></gold>"
+  line-item: "<dark_gray><time> <white><buyer></white> <gray>traded</gray> <white><paid></white> <gray>for</gray> <white><qty>x <item></white>"
+  from-suffix: " <dark_gray>(from <seller>)"
+  nav-prev: "<click:run_command:'<command>'><yellow>[Prev]</yellow></click>"
+  nav-next: "<click:run_command:'<command>'><yellow>[Next]</yellow></click>"
+
+# ───────────────────────────── commands ─────────────────────────────
+cmd:
+  help:
+    - "<gold>/vm claim <gray>- retrieve items from expired shops"
+    - "<gold>/shops <gray>- browse and teleport to open shops"
+    - "<gold>/shops search <item> | category <name> | sale <gray>- find shops"
+    - "<gold>/vm sale start <percent> <time> | stop <gray>- run a sale (e.g. /vm sale start 20 2h)"
+    - "<gold>/vm staff list | add <player> [role] | remove <player> | role <player> <role>"
+    - "<gold>/vm sales | purchases [page] <gray>- your transaction log"
+    - "<gold>/vm rate <1-5> <gray>- rate the shop you last bought from"
+  help-admin:
+    - "<gold>/vm create | remove | reload | effect | log <player> [page] <gray>(admin)"
+  reloaded: "<prefix><green>Config, language, effects and categories reloaded."
+  npc-created: "<prefix><green>Shop NPC created & saved to database!"
+  npc-removed: "<prefix><green>Shop NPC removed."
+  npc-removed-owned: "<prefix><green>Shop NPC removed (owner's items moved to /vm claim)."
+  look-at-npc: "<prefix><red>Look at a shop NPC (within <range> blocks)."
+  unknown-subcommand: "<prefix><red>Unknown subcommand."
+  unknown-player: "<prefix><red>Unknown player."
+  unknown-player-joined: "<prefix><red>Unknown player (they must have joined before)."
+  effect:
+    separator: "<gray>, <white>"
+    list: "<gold>Effects: <white><list>"
+    list-usage: "<gray>/vm effect test <id> [seconds] | off  <dark_gray>(look at a shop NPC)"
+    stopped: "<prefix><green>Test effect stopped."
+    playing: "<prefix><green>Playing <white><effect><green> for <seconds>s."
+    unknown: "<prefix><red>Unknown effect. Use /vm effect list."
+    usage: "<prefix><red>Usage: /vm effect list | test <id> [seconds] | off"
+  log:
+    usage: "<prefix><red>Usage: /vm log <player> [page]"
+  shops:
+    search-usage: "<prefix><red>Usage: /shops search <item, enchant or player>"
+    category-separator: "<gray>, <white>"
+    pick-category: "<prefix><red>Pick a category: <white><list>"
+  what:                                        # fills <action> in the two "resolve" messages
+    stop-sale: "stop a sale for"
+    run-sale: "run a sale for"
+    manage-staff: "manage staff for"
+    remove-staff: "remove that staff member from"
+    change-roles: "change roles in"
+  resolve:
+    none: "<prefix><red>You don't have a shop you can <action>."
+    several: "<prefix><red>You have several shops you can <action> - look at the shop villager you mean (within <range> blocks)."
+  sale:
+    bad-percent: "<prefix><red>The discount must be a whole number, e.g. 20."
+    bad-duration: "<prefix><red>Couldn't read the duration. Try 30m, 2h or 1d."
+    usage:
+      - "<prefix><red>Usage: /vm sale start <percent> <time> [unlisted] | /vm sale stop"
+      - "<gray>Example: <white>/vm sale start 20 2h</white> - 20% off for 2 hours. Or use the Run a Sale button in your shop menu."
+  staff:
+    usage: "<prefix><red>Usage: /vm staff list | add <player> [role] | remove <player> | role <player> <role>"
+    list-header: "<gold>--- <yellow><owner>'s shop</yellow> ---"
+    list-your-role: "<gray>Your role: <white><role>"
+    list-empty: "<gray>No staff."
+    list-member: "<gray>- <white><name> <gray>(<role>)"
+    none: "<gray>You don't own or work at any shop."
+    add-usage: "<prefix><red>Usage: /vm staff add <player> [stocker|manager|co-owner]"
+    roles-hint: "<prefix><red>Roles: stocker, manager, co-owner."
+    added: "<prefix><green>Added <white><name></white> as <yellow><role></yellow>."
+    remove-usage: "<prefix><red>Usage: /vm staff remove <player>"
+    removed: "<prefix><green>Removed <white><name></white> from your staff."
+    role-usage: "<prefix><red>Usage: /vm staff role <player> <stocker|manager|co-owner>"
+    role-set: "<prefix><green><white><name></white> is now <yellow><role></yellow>."
+  rate:
+    buy-first: "<prefix><red>Buy something from a shop first, then rate it."
+    usage: "<prefix><red>Usage: /vm rate <1-5>"

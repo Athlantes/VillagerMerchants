@@ -38,12 +38,12 @@ public class NametagManager {
         display.setPersistent(false); // Prevents permanent ghosting in chunks
 
         display.setBillboard(Display.Billboard.CENTER);
-        display.setSeeThrough(false);
-        display.setShadowed(true);
+        display.setSeeThrough(plugin.getConfig().getBoolean("nametag.see-through", false));
+        display.setShadowed(plugin.getConfig().getBoolean("nametag.shadowed", true));
         display.setAlignment(TextDisplay.TextAlignment.CENTER);
 
         Transformation transformation = new Transformation(
-                new Vector3f(0, 0.3f, 0),
+                new Vector3f(0, (float) plugin.getConfig().getDouble("nametag.height", 0.3), 0),
                 new AxisAngle4f(0, 0, 0, 1),
                 new Vector3f(1, 1, 1),
                 new AxisAngle4f(0, 0, 0, 1)
@@ -96,7 +96,7 @@ public class NametagManager {
                     }
                 }
             }
-        }, 0L, 4L);
+        }, 0L, Math.max(1, plugin.getConfig().getLong("nametag.animation-ticks", 4)));
     }
 
     public void removeNametag(UUID npcUuid) {

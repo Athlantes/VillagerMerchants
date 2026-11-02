@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.manager;
 
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -8,6 +9,7 @@ import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.model.Perm;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
+import org.riftlabs.villagerMerchants.util.Messages;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.ArrayList;
@@ -36,8 +38,11 @@ public class PromotionManager {
     private FileConfiguration cfg() { return plugin.getConfig(); }
     private ShopManager sm() { return plugin.getShopManager(); }
 
+    private int tickSeconds() { return Math.max(5, cfg().getInt("promotions.tick-seconds", 20)); }
+
     public void startTasks() {
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 20L * 20, 20L * 20);
+        long period = tickSeconds() * 20L;
+        Bukkit.getScheduler().runTaskTimer(plugin, this::tick, period, period);
     }
 
     // ------------------------------------------------------------ sales: config
@@ -47,6 +52,8 @@ public class PromotionManager {
     public int maxPercent() { return Math.min(95, Math.max(minPercent(), cfg().getInt("sales.max-percent", 50))); }
     public long maxDurationMs() { return (long) (cfg().getDouble("sales.max-hours", 24) * HOUR); }
     public long cooldownMs() { return cfg().getLong("sales.cooldown-minutes", 30) * MINUTE; }
+    /** Shortest allowed sale, in milliseconds. */
+    public long minDurationMs() { return Math.max(1, cfg().getLong("sales.min-minutes", 5)) * MINUTE; }
     public double saleFee() { return Math.max(0, cfg().getDouble("sales.fee", 0.0)); }
 
     public List<Integer> percentOptions() {
@@ -61,7 +68,7 @@ public class PromotionManager {
         List<Long> out = new ArrayList<>();
         for (int mins : cfg().getIntegerList("sales.duration-options")) {
             long ms = mins * MINUTE;
-            if (ms >= 5 * MINUTE && ms <= maxDurationMs()) out.add(ms);
+            if (ms >= minDurationMs() && ms <= maxDurationMs()) out.add(ms);
         }
         if (out.isEmpty()) out.addAll(List.of(30 * MINUTE, HOUR, 2 * HOUR, 6 * HOUR));
         return out;
@@ -92,31 +99,32 @@ public class PromotionManager {
 
     // ------------------------------------------------------------ sales: actions
 
-    /** @return null if the shop could start a sale right now, otherwise the reason (MiniMessage). */
-    public String saleBlocker(Shop shop) {
+    /** @return null if the shop could start a sale right now, otherwise the reason (ready to show in chat or lore). */
+    public Component saleBlocker(Shop shop) {
         long now = System.currentTimeMillis();
-        if (!salesEnabled()) return "<red>Sales are disabled on this server.";
-        if (!shop.isActive(now)) return "<red>Renew your rent before running a sale.";
-        if (shop.isOnSale(now)) return "<red>A sale is already running. Stop it first.";
-        if (discountableTrades(shop) == 0) return "<red>Sales only discount money-priced trades. Add one first (shift-left-click Payment 1 in the trade editor).";
+        var m = plugin.msg();
+        if (!salesEnabled()) return m.line("sale.blocker.disabled");
+        if (!shop.isActive(now)) return m.line("sale.blocker.rent-expired");
+        if (shop.isOnSale(now)) return m.line("sale.blocker.running");
+        if (discountableTrades(shop) == 0) return m.line("sale.blocker.no-money-trades");
         long wait = shop.getSaleExpiry() + cooldownMs() - now;
-        if (wait > 0) return "<red>You can run another sale in " + Text.duration(wait) + ".";
+        if (wait > 0) return m.line("sale.blocker.cooldown", "time", Text.duration(wait));
         return null;
     }
 
     public boolean startSale(Player p, Shop shop, int percent, long durationMs, boolean listed) {
         if (!shop.can(p.getUniqueId(), Perm.SALES) || !p.hasPermission("villagermerchants.sales")) {
-            p.sendMessage(Text.mm("<red>You can't run sales for this shop."));
+            plugin.msg().send(p, "sale.no-permission");
             return false;
         }
-        String block = saleBlocker(shop);
-        if (block != null) { p.sendMessage(Text.mm(block)); return false; }
+        Component block = saleBlocker(shop);
+        if (block != null) { p.sendMessage(block); return false; }
         if (percent < minPercent() || percent > maxPercent()) {
-            p.sendMessage(Text.mm("<red>The discount must be between " + minPercent() + "% and " + maxPercent() + "%."));
+            plugin.msg().send(p, "sale.invalid-percent", "min", minPercent(), "max", maxPercent());
             return false;
         }
-        if (durationMs < 5 * MINUTE || durationMs > maxDurationMs()) {
-            p.sendMessage(Text.mm("<red>A sale must last between 5 minutes and " + Text.duration(maxDurationMs()) + "."));
+        if (durationMs < minDurationMs() || durationMs > maxDurationMs()) {
+            plugin.msg().send(p, "sale.invalid-duration", "min", Text.duration(minDurationMs()), "max", Text.duration(maxDurationMs()));
             return false;
         }
         double fee = saleFee();
@@ -125,20 +133,21 @@ public class PromotionManager {
         shop.startSale(percent, System.currentTimeMillis() + durationMs, listed);
         sm().saveShop(shop);
         sm().refreshNameTag(shop.getId());
-        p.sendMessage(Text.mm("<green>Sale started: <yellow>" + percent + "% off</yellow> for <white>" + Text.duration(durationMs)
-                + "</white>" + (fee > 0 ? " <gray>(fee " + sm().money(fee) + ")" : "") + "."
-                + (listed ? " <gray>It's tagged ON SALE in /shops." : "")));
+        var m = plugin.msg();
+        m.send(p, "sale.started", "percent", percent, "time", Text.duration(durationMs),
+                "fee", fee > 0 ? m.ref("sale.started-fee", "fee", Text.esc(sm().money(fee))) : Messages.parsed(""),
+                "listed", listed ? m.ref("sale.started-listed") : Messages.parsed(""));
         return true;
     }
 
     public boolean stopSale(Player p, Shop shop) {
-        if (!shop.can(p.getUniqueId(), Perm.SALES)) { p.sendMessage(Text.mm("<red>You can't run sales for this shop.")); return false; }
+        if (!shop.can(p.getUniqueId(), Perm.SALES)) { plugin.msg().send(p, "sale.no-permission"); return false; }
         long now = System.currentTimeMillis();
-        if (!shop.isOnSale(now)) { p.sendMessage(Text.mm("<gray>There's no sale running.")); return false; }
+        if (!shop.isOnSale(now)) { plugin.msg().send(p, "sale.none-running"); return false; }
         shop.endSale(now);
         sm().saveShop(shop);
         sm().refreshNameTag(shop.getId());
-        p.sendMessage(Text.mm("<yellow>Sale stopped."));
+        plugin.msg().send(p, "sale.stopped");
         return true;
     }
 
@@ -155,10 +164,8 @@ public class PromotionManager {
     public String nametagBanner(Shop shop) {
         long now = System.currentTimeMillis();
         if (!shop.isOnSale(now) || !cfg().getBoolean("sales.banner", true)) return "";
-        String fmt = cfg().getString("sales.banner-format",
-                "<red><bold>ON SALE</bold> <yellow>-<percent>%</yellow> <gray>(<time>)</gray>");
-        return "<br>" + fmt.replace("<percent>", String.valueOf(shop.getSalePercent()))
-                .replace("<time>", Text.duration(shop.getSaleExpiry() - now));
+        return "<br>" + plugin.msg().str("sale.banner", "percent", shop.getSalePercent(),
+                "time", Text.duration(shop.getSaleExpiry() - now));
     }
 
     /** Effect to play on the NPC: the optional sale effect while a sale runs, otherwise the owner's own. */
@@ -208,35 +215,36 @@ public class PromotionManager {
         return best == Long.MAX_VALUE ? 0 : best;
     }
 
-    /** @return null if the package can be bought for this shop right now, otherwise the reason (MiniMessage). */
-    public String featuredBlocker(Shop shop, FeaturedPackage pkg) {
+    /** @return null if the package can be bought for this shop right now, otherwise the reason (ready to show in chat or lore). */
+    public Component featuredBlocker(Shop shop, FeaturedPackage pkg) {
         long now = System.currentTimeMillis();
-        if (!featuredEnabled()) return "<red>Featured listings are disabled on this server.";
-        if (!shop.isActive(now)) return "<red>Renew your rent before promoting this shop.";
-        if (shop.completeTrades().isEmpty()) return "<red>Add at least one live offer before promoting this shop.";
+        var m = plugin.msg();
+        if (!featuredEnabled()) return m.line("featured.blocker.disabled");
+        if (!shop.isActive(now)) return m.line("featured.blocker.rent-expired");
+        if (shop.completeTrades().isEmpty()) return m.line("featured.blocker.no-offers");
         if (!shop.isFeatured(now) && featuredInUse() >= maxFeaturedSlots()) {
-            return "<red>All " + maxFeaturedSlots() + " featured slots are taken. Next one frees in " + Text.duration(nextSlotIn()) + ".";
+            return m.line("featured.blocker.slots-full", "slots", maxFeaturedSlots(), "time", Text.duration(nextSlotIn()));
         }
         long base = Math.max(now, shop.getFeaturedUntil());
         if (base + pkg.hours() * HOUR - now > maxStackHours() * HOUR) {
-            return "<red>You can't be featured more than " + maxStackHours() + "h ahead.";
+            return m.line("featured.blocker.too-far", "hours", maxStackHours());
         }
         return null;
     }
 
     public boolean buyFeatured(Player p, Shop shop, FeaturedPackage pkg) {
         if (!shop.can(p.getUniqueId(), Perm.BILLING) || !p.hasPermission("villagermerchants.promote")) {
-            p.sendMessage(Text.mm("<red>You can't buy promotions for this shop."));
+            plugin.msg().send(p, "featured.no-permission");
             return false;
         }
-        String block = featuredBlocker(shop, pkg);
-        if (block != null) { p.sendMessage(Text.mm(block)); return false; }
+        Component block = featuredBlocker(shop, pkg);
+        if (block != null) { p.sendMessage(block); return false; }
         if (!sm().charge(p, pkg.price())) return false;   // withdrawn, never paid out: a pure money sink
         long base = Math.max(System.currentTimeMillis(), shop.getFeaturedUntil());
         shop.setFeaturedUntil(base + pkg.hours() * HOUR);
         sm().saveShop(shop);
-        p.sendMessage(Text.mm("<green>Featured for <white>" + pkg.hours() + "h</white> more! Pinned at the top of /shops for another <white>"
-                + Text.duration(shop.getFeaturedUntil() - System.currentTimeMillis()) + "</white>."));
+        plugin.msg().send(p, "featured.bought", "hours", pkg.hours(),
+                "time", Text.duration(shop.getFeaturedUntil() - System.currentTimeMillis()));
         return true;
     }
 
@@ -245,7 +253,8 @@ public class PromotionManager {
     private void tick() {
         tickCount++;
         long now = System.currentTimeMillis();
-        boolean refreshBanners = tickCount % 3 == 0;   // once a minute
+        int every = Math.max(1, cfg().getInt("sales.banner-refresh-seconds", 60) / tickSeconds());
+        boolean refreshBanners = tickCount % every == 0;
         for (Shop s : new ArrayList<>(sm().allShops())) {
             if (!sm().isLive(s)) continue;
             Player owner = Bukkit.getPlayer(s.getOwner());
@@ -254,7 +263,7 @@ public class PromotionManager {
                 s.endSale(s.getSaleExpiry());
                 sm().saveShop(s);
                 sm().refreshNameTag(s.getId());
-                if (owner != null) owner.sendMessage(Text.mm("<yellow>Your shop sale has ended. Prices are back to normal."));
+                if (owner != null) plugin.msg().send(owner, "sale.ended");
             } else if (refreshBanners && s.isOnSale(now)) {               // keep the "(1h 20m)" fresh
                 plugin.getNametagManager().updateShopNametag(s.getId(), sm().activeNametagFormat(s));
             }
@@ -262,7 +271,7 @@ public class PromotionManager {
             if (s.getFeaturedUntil() > 0 && !s.isFeatured(now)) {        // featured time ran out
                 s.setFeaturedUntil(0);
                 sm().saveShop(s);
-                if (owner != null) owner.sendMessage(Text.mm("<yellow>Your shop's featured listing has expired."));
+                if (owner != null) plugin.msg().send(owner, "featured.expired");
             }
         }
     }

@@ -39,7 +39,7 @@ public class ShopInteractListener implements Listener {
         sm.refreshNameTag(villager);
 
         if (!player.hasPermission("villagermerchants.use")) {
-            player.sendMessage(Text.mm("<red>No permission."));
+            plugin.msg().send(player, "misc.no-permission");
             return;
         }
 
@@ -48,7 +48,7 @@ public class ShopInteractListener implements Listener {
         } else if (shop.isMember(player.getUniqueId()) && !player.isSneaking()) {
             new OwnerMenuGui(plugin, player, shop).open();   // owner or staff; sneak = preview as a customer
         } else if (!shop.isActive(System.currentTimeMillis())) {
-            player.sendMessage(Text.mm("<gray>This shop is closed."));
+            plugin.msg().send(player, "customer.shop-closed");
         } else {
             plugin.getCustomerTrades().open(player, shop);
         }

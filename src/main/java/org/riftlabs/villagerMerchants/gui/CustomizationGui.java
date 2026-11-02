@@ -16,6 +16,7 @@ import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.model.PlayerProfile;
 import org.riftlabs.villagerMerchants.model.Shop;
+import org.riftlabs.villagerMerchants.util.Messages;
 import org.riftlabs.villagerMerchants.util.Skins;
 import org.riftlabs.villagerMerchants.util.Text;
 
@@ -75,7 +76,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         loadNametagsFromFile();
         if (effectsEnabled) allEffects.addAll(plugin.getEffectManager().getRegistry().all());
 
-        this.inv = Bukkit.createInventory(this, 54, Text.mm("<dark_gray>Shop Customization"));
+        this.inv = Bukkit.createInventory(this, 54, plugin.msg().get("custom-gui.title"));
         render();
     }
 
@@ -96,8 +97,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         }
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
         for (String key : cfg.getKeys(false)) {
-            String name = cfg.getString(key + ".name", "Unknown");
-            String format = cfg.getString(key + ".format", "<white><bold>Shop</bold></white>");
+            String name = cfg.getString(key + ".name", plugin.msg().raw("misc.unknown"));
+            String format = cfg.getString(key + ".format", plugin.msg().raw("nametag.fallback-format"));
             double price = cfg.getDouble(key + ".price", 0.0);
             allNametags.add(new NametagPreset(key, format, name, price));
         }
@@ -106,21 +107,21 @@ public class CustomizationGui implements GuiHolder, ShopBound {
     private void render() {
         ShopManager sm = plugin.getShopManager();
         PlayerProfile p = sm.getProfile(player.getUniqueId());
+        var m = plugin.msg();
         inv.clear();
 
         // Render Tabs
         if (skinsEnabled) {
-            inv.setItem(2, Text.icon(Material.LEATHER_CHESTPLATE,
-                    currentTab == Tab.SKINS ? "<green>▶ Skins" : "<gray>Skins", "<yellow>Click to view outfit upgrades"));
+            inv.setItem(2, m.icon(plugin.material("tab-skins", Material.LEATHER_CHESTPLATE),
+                    currentTab == Tab.SKINS ? "custom-gui.tab-skins-active" : "custom-gui.tab-skins"));
         }
         if (tagsEnabled) {
-            inv.setItem(4, Text.icon(Material.NAME_TAG,
-                    currentTab == Tab.NAMETAGS ? "<green>▶ Nametags" : "<gray>Nametags", "<yellow>Click to view hologram upgrades"));
+            inv.setItem(4, m.icon(plugin.material("tab-nametags", Material.NAME_TAG),
+                    currentTab == Tab.NAMETAGS ? "custom-gui.tab-nametags-active" : "custom-gui.tab-nametags"));
         }
-
         if (effectsEnabled) {
-            inv.setItem(6, Text.icon(Material.BLAZE_POWDER,
-                    currentTab == Tab.EFFECTS ? "<green>▶ Effects" : "<gray>Effects", "<yellow>Click to view particle upgrades"));
+            inv.setItem(6, m.icon(plugin.material("tab-effects", Material.BLAZE_POWDER),
+                    currentTab == Tab.EFFECTS ? "custom-gui.tab-effects-active" : "custom-gui.tab-effects"));
         }
 
         if (currentTab == Tab.SKINS && skinsEnabled) {
@@ -138,7 +139,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             for (int i = start; i < end; i++) {
                 NametagPreset data = allNametags.get(i);
                 int slot = CONTENT_SLOTS[i - start];
-                ItemStack it = new ItemStack(Material.NAME_TAG);
+                ItemStack it = new ItemStack(plugin.material("customization-nametag", Material.NAME_TAG));
                 org.bukkit.inventory.meta.ItemMeta meta = it.getItemMeta();
 
                 // Safe formatting for inventory items (turn animations into a static rainbow or color)
@@ -146,24 +147,24 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                 String parsedFormat = data.format()
                         .replace("<anim_rainbow>", "<rainbow>") // MiniMessage static rainbow
                         .replace("</anim_rainbow>", "</rainbow>")
-                        .replace("<bold>", "<bold>" + playerName + "'s ")
-                        .replace("Available Shop", "Shop");
+                        .replace("<bold>", "<bold>" + m.str("nametag.preview-owner", "owner", Text.esc(playerName)))
+                        .replace(m.raw("nametag.replace-from"), m.raw("nametag.replace-to"));
 
                 meta.displayName(Text.mm(parsedFormat));
 
                 List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-                lore.add(Text.mm("<gray>Price: <white>$" + data.price()));
+                lore.add(m.line("custom-gui.price", "price", data.price() <= 0 ? m.ref("misc.free") : Messages.parsed(Text.esc(sm.money(data.price())))));
                 lore.add(net.kyori.adventure.text.Component.empty());
 
                 if (p.getEquippedNametagFormat().equals(data.format())) {
-                    lore.add(Text.mm("<green>✔ Currently Equipped"));
+                    lore.add(m.line("custom-gui.status.equipped"));
                     it = Text.glow(it);
                 } else if (p.ownsNametag(data.id())) {
-                    lore.add(Text.mm("<yellow>Click to equip!"));
+                    lore.add(m.line("custom-gui.status.click-equip"));
                 } else if (data.id().equals(confirming)) {
-                    lore.add(Text.mm("<yellow>Click again to confirm purchase!"));
+                    lore.add(m.line("custom-gui.status.click-confirm"));
                 } else {
-                    lore.add(Text.mm("<yellow>Click to purchase."));
+                    lore.add(m.line("custom-gui.status.click-buy"));
                 }
 
                 meta.lore(lore);
@@ -176,16 +177,16 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
         if (currentTab == Tab.EFFECTS && effectsEnabled) renderEffects(sm, p);
 
-        inv.setItem(49, Text.icon(Material.OAK_DOOR, "<red>Back"));
+        inv.setItem(49, Gui.back(plugin));
         fillEmptySlots();
     }
 
     private void renderPagination(int maxPages) {
         if (page > 0) {
-            inv.setItem(48, Text.icon(Material.ARROW, "<yellow>Previous Page", "<gray>Page " + page + " / " + maxPages));
+            inv.setItem(48, Gui.previousPage(plugin, page, maxPages));
         }
         if (page < maxPages - 1) {
-            inv.setItem(50, Text.icon(Material.ARROW, "<yellow>Next Page", "<gray>Page " + (page + 2) + " / " + maxPages));
+            inv.setItem(50, Gui.nextPage(plugin, page + 2, maxPages));
         }
     }
 
@@ -197,38 +198,39 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
         for (int i = start; i < end; i++) {
             EffectDefinition def = allEffects.get(i);
+            var m = plugin.msg();
             ItemStack it = new ItemStack(def.icon());
             ItemMeta meta = it.getItemMeta();
             meta.displayName(Text.item(def.name()));
             meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
 
             List<Component> lore = new ArrayList<>();
-            for (String line : def.description()) lore.add(Text.item("<gray>" + line));
+            for (String line : def.description()) lore.add(m.line("custom-gui.effect-description-line", "line", Messages.parsed(line)));
             if (!def.description().isEmpty()) lore.add(Component.empty());
-            lore.add(Text.item("<gray>Price: <white>" + (def.price() <= 0 ? "Free" : sm.money(def.price()))));
+            lore.add(m.line("custom-gui.price", "price", def.price() <= 0 ? m.ref("misc.free") : Messages.parsed(Text.esc(sm.money(def.price())))));
             lore.add(Component.empty());
 
             boolean owned = def.price() <= 0 || p.ownsEffect(def.id());
             if (!def.permission().isEmpty() && !player.hasPermission(def.permission())) {
-                lore.add(Text.item("<red>✘ Locked (missing permission)"));
+                lore.add(m.line("custom-gui.status.locked"));
             } else if (def.id().equals(p.getEquippedEffect())) {
-                lore.add(Text.item("<green>✔ Currently Equipped"));
+                lore.add(m.line("custom-gui.status.equipped"));
                 meta.setEnchantmentGlintOverride(true);
             } else if (owned) {
-                lore.add(Text.item("<yellow>Click to equip!"));
+                lore.add(m.line("custom-gui.status.click-equip"));
             } else if (def.id().equals(confirming)) {
-                lore.add(Text.item("<yellow>Click again to confirm purchase!"));
+                lore.add(m.line("custom-gui.status.click-confirm"));
             } else {
-                lore.add(Text.item("<yellow>Click to purchase."));
+                lore.add(m.line("custom-gui.status.click-buy"));
             }
-            lore.add(Text.item("<dark_gray>Right-click to preview"));
+            lore.add(m.line("custom-gui.effect-preview-hint"));
 
             meta.lore(lore);
             it.setItemMeta(meta);
             inv.setItem(CONTENT_SLOTS[i - start], it);
         }
 
-        inv.setItem(45, Text.icon(Material.BARRIER, "<red>Remove Effect", "<gray>Disable particles on this shop"));
+        inv.setItem(45, plugin.msg().icon(plugin.material("effect-remove", Material.BARRIER), "custom-gui.effect-remove"));
         renderPagination(maxPages);
     }
 
@@ -260,14 +262,14 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         if (e.isRightClick()) {
             int secs = plugin.getEffectManager().getRegistry().previewSeconds();
             if (plugin.getEffectManager().preview(shop.getId(), def.id(), secs, p.getEquippedEffect())) {
-                player.sendMessage(Text.mm("<gray>Previewing </gray>" + def.name() + "<gray> for " + secs + " seconds..."));
+                plugin.msg().send(player, "custom-gui.effect-previewing", "effect", Messages.parsed(def.name()), "seconds", secs);
                 Bukkit.getScheduler().runTask(plugin, () -> player.closeInventory());
             }
             return;
         }
 
         if (!def.permission().isEmpty() && !player.hasPermission(def.permission())) {
-            player.sendMessage(Text.mm("<red>You don't have access to this effect."));
+            plugin.msg().send(player, "custom-gui.effect-no-access");
             return;
         }
         if (def.id().equals(p.getEquippedEffect())) return;
@@ -280,9 +282,9 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                 plugin.getEconomy().withdrawPlayer(player, def.price());
                 p.unlockEffect(def.id());
                 equipEffect(p, def.id());
-                player.sendMessage(Text.mm("<green>Purchased and applied: </green>" + def.name()));
+                plugin.msg().send(player, "custom-gui.purchased", "name", Messages.parsed(def.name()));
             } else {
-                player.sendMessage(Text.mm("<red>You don't have enough money!"));
+                plugin.msg().send(player, "economy.not-enough", "amount", plugin.getShopManager().money(def.price()));
             }
             confirming = null;
         } else {
@@ -292,16 +294,15 @@ public class CustomizationGui implements GuiHolder, ShopBound {
     }
 
     private ItemStack renderSkinItem(ShopManager sm, PlayerProfile p, Skins.Skin s) {
+        var m = plugin.msg();
         if (sm.isEquipped(p, s)) {
-            return Text.glow(Text.icon(s.icon(), "<green>" + s.name() + " <gray>(equipped)"));
+            return Text.glow(m.icon(s.icon(), "custom-gui.skin-equipped", "skin", s.name()));
         } else if (sm.owns(p, s)) {
-            return Text.icon(s.icon(), "<white>" + s.name(), "<yellow>Click to equip");
+            return m.icon(s.icon(), "custom-gui.skin-owned", "skin", s.name());
         } else if (s.id().equals(confirming)) {
-            return Text.glow(Text.icon(s.icon(), "<yellow>Click again to confirm",
-                    "<gray>" + s.name() + " for <white>" + sm.money(sm.skinPrice(s))));
+            return Text.glow(m.icon(s.icon(), "custom-gui.skin-confirm", "skin", s.name(), "price", sm.money(sm.skinPrice(s))));
         } else {
-            return Text.icon(s.icon(), "<red>" + s.name() + " <gray>(locked)",
-                    "<gray>Price: <white>" + sm.money(sm.skinPrice(s)), "<yellow>Click to buy");
+            return m.icon(s.icon(), "custom-gui.skin-locked", "skin", s.name(), "price", sm.money(sm.skinPrice(s)));
         }
     }
 
@@ -368,9 +369,9 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                         plugin.getDatabaseManager().async(() ->
                                 plugin.getDatabaseManager().updateNametagData(player.getUniqueId().toString(), p.getUnlockedNametagsString(), p.getEquippedNametagFormat())
                         );
-                        player.sendMessage(Text.mm("<green>Purchased and applied: " + data.name()));
+                        plugin.msg().send(player, "custom-gui.purchased", "name", Messages.parsed(data.name()));
                     } else {
-                        player.sendMessage(Text.mm("<red>You don't have enough money!"));
+                        plugin.msg().send(player, "economy.not-enough", "amount", sm.money(data.price()));
                     }
                     confirming = null;
                     render();
@@ -400,7 +401,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
     }
 
     private void fillEmptySlots() {
-        ItemStack pane = Text.icon(Material.BLACK_STAINED_GLASS_PANE, " ");
+        ItemStack pane = Gui.filler(plugin);
         for (int i = 0; i < inv.getSize(); i++) {
             if (inv.getItem(i) == null || inv.getItem(i).getType() == Material.AIR) {
                 inv.setItem(i, pane);

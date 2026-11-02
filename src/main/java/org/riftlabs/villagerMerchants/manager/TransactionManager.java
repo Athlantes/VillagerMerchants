@@ -14,6 +14,7 @@ import org.riftlabs.villagerMerchants.database.DatabaseManager.TxMode;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.TxRow;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
+import org.riftlabs.villagerMerchants.util.Messages;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.time.Instant;
@@ -32,14 +33,7 @@ import java.util.function.Consumer;
  * `transactions` table; the same rows feed the web dashboard.
  */
 public class TransactionManager {
-    private static final int PAGE_SIZE = 8;
-    private static final long WEEK = 7L * 86_400_000L;
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm");
-
-    public static final String DEFAULT_MONEY_FORMAT =
-            "<green>[Sale] <white><buyer></white> bought <white><qty>x <item></white> for <gold><price></gold>";
-    public static final String DEFAULT_ITEM_FORMAT =
-            "<green>[Trade] <white><buyer></white> traded <white><paid></white> for <white><qty>x <item></white>";
+    private static final long DAY_MS = 86_400_000L;
 
     public record ShopStats(long sales7d, double money7d, long salesTotal, double moneyTotal) {}
 
@@ -54,6 +48,17 @@ public class TransactionManager {
     }
 
     private FileConfiguration cfg() { return plugin.getConfig(); }
+
+    /** Rows per page of /vm sales, /vm purchases and /vm log. */
+    private int pageSize() { return Math.max(1, cfg().getInt("log.page-size", 8)); }
+    /** Days covered by the "recent" numbers in the owner menu. */
+    public int statsDays() { return Math.max(1, cfg().getInt("log.stats-days", 7)); }
+
+    private DateTimeFormatter timeFormat() {
+        try { return DateTimeFormatter.ofPattern(cfg().getString("log.time-format", "MM-dd HH:mm")); }
+        catch (IllegalArgumentException e) { return DateTimeFormatter.ofPattern("MM-dd HH:mm"); }
+    }
+
     private static String key(String shopId, String owner) { return shopId + "|" + owner; }
     private static String key(Shop s) { return key(s.getId().toString(), s.getOwner().toString()); }
 
@@ -113,8 +118,8 @@ public class TransactionManager {
 
     private TagResolver[] resolvers(TxRow r) {
         return new TagResolver[]{
-                Placeholder.unparsed("buyer", r.buyerName() == null ? "Someone" : r.buyerName()),
-                Placeholder.unparsed("item", r.itemName() == null ? "item" : r.itemName()),
+                Placeholder.unparsed("buyer", r.buyerName() == null ? plugin.msg().raw("misc.someone") : r.buyerName()),
+                Placeholder.unparsed("item", r.itemName() == null ? plugin.msg().raw("misc.item") : r.itemName()),
                 Placeholder.unparsed("qty", String.valueOf(r.itemQty())),
                 Placeholder.unparsed("price", plugin.getShopManager().money(r.money())),
                 Placeholder.unparsed("paid", r.paySummary() == null ? "" : r.paySummary())
@@ -123,10 +128,7 @@ public class TransactionManager {
 
     private void notifySale(Player seller, TxRow r) {
         boolean money = "MONEY".equals(r.kind());
-        String fmt = money
-                ? cfg().getString("notifications.format.money", DEFAULT_MONEY_FORMAT)
-                : cfg().getString("notifications.format.item", DEFAULT_ITEM_FORMAT);
-        Component msg = Text.mm(fmt, resolvers(r));
+        Component msg = Text.mm(plugin.msg().raw(money ? "notify.sale-money" : "notify.sale-item"), resolvers(r));
         if (cfg().getBoolean("notifications.chat", true)) seller.sendMessage(msg);
         if (cfg().getBoolean("notifications.actionbar", true)) seller.sendActionBar(msg);
         String sound = cfg().getString("notifications.sound", "entity.experience_orb.pickup");
@@ -154,17 +156,13 @@ public class TransactionManager {
     }
 
     private void showJoinSummary(Player p, DatabaseManager.Unread un) {
-        p.sendMessage(Text.mm("<gold>--- <yellow>While you were away</yellow> ---"));
-        String earned = un.money() > 0
-                ? " <gray>and earned <gold><money></gold>"
-                : "";
-        p.sendMessage(Text.mm("<green><sales> sale(s)</green>" + earned,
-                Placeholder.unparsed("sales", String.valueOf(un.sales())),
-                Placeholder.unparsed("money", plugin.getShopManager().money(un.money()))));
+        var m = plugin.msg();
+        m.send(p, "join.header");
+        String money = plugin.getShopManager().money(un.money());
+        m.send(p, "join.summary", "sales", un.sales(),
+                "earned", un.money() > 0 ? Messages.parsed(m.str("join.earned", "money", Text.esc(money))) : Messages.parsed(""));
         for (TxRow r : un.recent()) p.sendMessage(line(r, TxMode.SALES));
-        if (un.rows() > un.recent().size()) {
-            p.sendMessage(Text.mm("<gray>...and more. Use <yellow>/vm sales</yellow> for the full log."));
-        }
+        if (un.rows() > un.recent().size()) m.send(p, "join.more");
         String sound = cfg().getString("notifications.sound", "entity.experience_orb.pickup");
         if (sound != null && !sound.isBlank()) {
             try { p.playSound(p.getLocation(), sound, 1f, 1.2f); } catch (Exception ignored) {}
@@ -174,13 +172,11 @@ public class TransactionManager {
     // ------------------------------------------------------------ history (/vm sales, /vm purchases, /vm log)
 
     private Component line(TxRow r, TxMode mode) {
-        String time = TIME.format(Instant.ofEpochMilli(r.ts()).atZone(ZoneId.systemDefault()));
+        String time = timeFormat().format(Instant.ofEpochMilli(r.ts()).atZone(ZoneId.systemDefault()));
         boolean money = "MONEY".equals(r.kind());
-        String fmt = money
-                ? "<dark_gray><time> <white><buyer></white> <gray>bought</gray> <white><qty>x <item></white> <gray>for</gray> <gold><price></gold>"
-                : "<dark_gray><time> <white><buyer></white> <gray>traded</gray> <white><paid></white> <gray>for</gray> <white><qty>x <item></white>";
-        if (mode != TxMode.SALES) fmt += " <dark_gray>(from <seller>)";
-        String sellerName = "?";
+        String fmt = plugin.msg().raw(money ? "history.line-money" : "history.line-item");
+        if (mode != TxMode.SALES) fmt += plugin.msg().raw("history.from-suffix");
+        String sellerName = plugin.msg().raw("misc.unknown-short");
         try { sellerName = plugin.getShopManager().ownerName(UUID.fromString(r.seller())); } catch (IllegalArgumentException ignored) {}
         return Text.mm(fmt, TagResolver.resolver(resolvers(r)),
                 Placeholder.unparsed("time", time), Placeholder.unparsed("seller", sellerName));
@@ -195,9 +191,10 @@ public class TransactionManager {
         final String sid = subject.toString();
         db.async(() -> {
             DatabaseManager.Totals tot = db.totals(mode, sid);
-            int pages = Math.max(1, (int) Math.ceil(tot.rows() / (double) PAGE_SIZE));
+            final int size = pageSize();
+            int pages = Math.max(1, (int) Math.ceil(tot.rows() / (double) size));
             int p = Math.min(want, pages);
-            List<TxRow> rows = db.queryTransactions(mode, sid, PAGE_SIZE, (p - 1) * PAGE_SIZE);
+            List<TxRow> rows = db.queryTransactions(mode, sid, size, (p - 1) * size);
             plugin.sync(() -> renderHistory(viewer, mode, subjectName, tot, rows, p, pages));
         });
     }
@@ -206,28 +203,24 @@ public class TransactionManager {
                                DatabaseManager.Totals tot, List<TxRow> rows, int page, int pages) {
         if (viewer instanceof Player pl && !pl.isOnline()) return;
         if (tot.rows() == 0) {
-            viewer.sendMessage(Text.mm("<gray>No transactions yet."));
+            plugin.msg().send(viewer, "history.empty");
             return;
         }
+        var m = plugin.msg();
         String title = switch (mode) {
-            case SALES -> "Your sales";
-            case PURCHASES -> "Your purchases";
-            case BOTH -> "Log: " + subjectName;
+            case SALES -> m.raw("history.title-sales");
+            case PURCHASES -> m.raw("history.title-purchases");
+            case BOTH -> m.str("history.title-both", "player", subjectName);
         };
-        viewer.sendMessage(Text.mm("<gold>--- <yellow><title></yellow> <gray>(page <page>/<pages>)</gray> ---",
-                Placeholder.unparsed("title", title),
-                Placeholder.unparsed("page", String.valueOf(page)),
-                Placeholder.unparsed("pages", String.valueOf(pages))));
+        m.send(viewer, "history.header", "title", title, "page", page, "pages", pages);
         for (TxRow r : rows) viewer.sendMessage(line(r, mode));
 
-        String summary = switch (mode) {
-            case SALES -> "<gray>All time: <white><sales></white> sale(s), earned <gold><money></gold>";
-            case PURCHASES -> "<gray>All time: <white><sales></white> purchase(s), spent <gold><money></gold>";
-            case BOTH -> "<gray>All time: <white><sales></white> trade(s) involving this player";
+        String summaryKey = switch (mode) {
+            case SALES -> "history.summary-sales";
+            case PURCHASES -> "history.summary-purchases";
+            case BOTH -> "history.summary-both";
         };
-        viewer.sendMessage(Text.mm(summary,
-                Placeholder.unparsed("sales", String.valueOf(tot.sales())),
-                Placeholder.unparsed("money", plugin.getShopManager().money(tot.money()))));
+        m.send(viewer, summaryKey, "sales", tot.sales(), "money", plugin.getShopManager().money(tot.money()));
 
         String base = switch (mode) {
             case SALES -> "/vm sales ";
@@ -235,8 +228,8 @@ public class TransactionManager {
             case BOTH -> "/vm log " + subjectName + " ";
         };
         StringBuilder nav = new StringBuilder();
-        if (page > 1) nav.append("<click:run_command:'").append(base).append(page - 1).append("'><yellow>[Prev]</yellow></click> ");
-        if (page < pages) nav.append("<click:run_command:'").append(base).append(page + 1).append("'><yellow>[Next]</yellow></click>");
+        if (page > 1) nav.append(m.str("history.nav-prev", "command", base + (page - 1))).append(' ');
+        if (page < pages) nav.append(m.str("history.nav-next", "command", base + (page + 1)));
         if (nav.length() > 0) viewer.sendMessage(Text.mm(nav.toString()));
     }
 
@@ -245,7 +238,7 @@ public class TransactionManager {
     public void loadStats(Shop shop, Consumer<ShopStats> callback) {
         final String sid = shop.getId().toString();
         final String owner = shop.getOwner().toString();
-        final long since = System.currentTimeMillis() - WEEK;
+        final long since = System.currentTimeMillis() - statsDays() * DAY_MS;
         db.async(() -> {
             DatabaseManager.Totals week = db.shopTotals(sid, owner, since);
             DatabaseManager.Totals all = db.shopTotals(sid, owner, 0L);

@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.listeners;
 
+import net.kyori.adventure.text.Component;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import org.bukkit.Bukkit;
@@ -55,13 +56,14 @@ public class CustomerTradeListener implements Listener {
         ShopManager sm = plugin.getShopManager();
         List<MerchantRecipe> recipes = sm.buildRecipes(shop);
         if (recipes.isEmpty()) {
-            p.sendMessage(Text.mm("<gray>This shop has nothing for sale yet."));
+            plugin.msg().send(p, "customer.nothing-for-sale");
             return;
         }
         RatingManager.Summary rating = plugin.getRatings().summary(shop);
-        String title = "<dark_gray>" + Text.esc(sm.ownerName(shop.getOwner())) + "'s Shop";
-        if (rating.count() > 0) title += " <gold>\u2605" + Text.oneDecimal(rating.average());
-        Merchant m = Bukkit.createMerchant(Text.mm(title));
+        String owner = sm.ownerName(shop.getOwner());
+        Merchant m = Bukkit.createMerchant(rating.count() > 0
+                ? plugin.msg().get("customer.title-rated", "owner", owner, "rating", Text.oneDecimal(rating.average()))
+                : plugin.msg().get("customer.title", "owner", owner));
         m.setRecipes(recipes);
         p.openMerchant(m, true);
         Session session = new Session(shop.getId());
@@ -168,11 +170,11 @@ public class CustomerTradeListener implements Listener {
         Shop shop = sm.getShop(session.shopId);
         if (shop == null || !shop.isActive(System.currentTimeMillis())) {
             p.closeInventory();
-            p.sendMessage(Text.mm("<gray>This shop is closed."));
+            plugin.msg().send(p, "customer.shop-closed");
             return;
         }
         if (shop.isMember(p.getUniqueId())) {
-            p.sendMessage(Text.mm("<yellow>Preview mode: you can't buy from a shop you own or work at."));
+            plugin.msg().send(p, "customer.preview-mode");
             return;
         }
         List<Trade> trades = shop.completeTrades();
@@ -185,7 +187,7 @@ public class CustomerTradeListener implements Listener {
         MerchantRecipe sel = idx < merchant.getRecipeCount() ? merchant.getRecipe(idx) : null;
         if (sel == null || !sel.getResult().isSimilar(trade.getResult())) {
             p.closeInventory();
-            p.sendMessage(Text.mm("<yellow>The shop was updated. Please reopen it."));
+            plugin.msg().send(p, "customer.shop-updated");
             return;
         }
 
@@ -195,22 +197,22 @@ public class CustomerTradeListener implements Listener {
         if (trade.isMoney() && (session.prices == null || idx >= session.prices.length
                 || Math.abs(session.prices[idx] - unit) > 0.0001)) {
             p.closeInventory();
-            p.sendMessage(Text.mm("<yellow>This shop's prices just changed. Please reopen it."));
+            plugin.msg().send(p, "customer.prices-changed");
             return;
         }
 
-        int times = e.isShiftClick() ? 64 : 1;
+        int times = e.isShiftClick() ? Math.max(1, plugin.getConfig().getInt("trading.shift-click-max", 64)) : 1;
         int done = 0;
-        String err = null;
+        Component err = null;
         if (trade.isMoney()) {
-            String[] holder = new String[1];
+            Component[] holder = new Component[1];
             done = tradeMoney(p, shop, trade, unit, times, holder);
             err = holder[0];
         } else {
             while (done < times && (err = tryTrade(p, shop, trade, mi)) == null) done++;
         }
 
-        if (done == 0 && err != null) p.sendMessage(Text.mm(err));
+        if (done == 0 && err != null) p.sendMessage(err);
         if (done > 0) {
             shop.setDirty(true);
             session.bought = true;
@@ -232,7 +234,8 @@ public class CustomerTradeListener implements Listener {
      *
      * @return how many times the trade executed; if 0, err[0] holds the reason
      */
-    private int tradeMoney(Player p, Shop shop, Trade t, double price, int times, String[] err) {
+    private int tradeMoney(Player p, Shop shop, Trade t, double price, int times, Component[] err) {
+        var m = plugin.msg();
         ShopManager sm = plugin.getShopManager();
         Economy econ = plugin.getEconomy();
         ItemStack res = t.getResult();
@@ -242,10 +245,10 @@ public class CustomerTradeListener implements Listener {
         Inventory stockSim = InvUtil.sim(st.getContents(), 54);
         Inventory bagSim = InvUtil.sim(p.getInventory().getStorageContents(), 36);
         int n = 0;
-        String limit = null;
+        Component limit = null;
         while (n < times) {
-            if (!stockSim.containsAtLeast(res, res.getAmount())) { limit = "<red>This item is out of stock."; break; }
-            if (!bagSim.addItem(res.clone()).isEmpty()) { limit = "<red>Your inventory is full."; break; }
+            if (!stockSim.containsAtLeast(res, res.getAmount())) { limit = m.get("customer.error.out-of-stock"); break; }
+            if (!bagSim.addItem(res.clone()).isEmpty()) { limit = m.get("customer.error.inventory-full"); break; }
             stockSim.removeItem(res.clone());
             n++;
         }
@@ -255,14 +258,14 @@ public class CustomerTradeListener implements Listener {
         int affordable = (int) Math.floor(balance / price + 1e-9);
         if (affordable < n) {
             n = affordable;
-            limit = "<red>You need " + sm.money(price) + " for that.";
+            limit = m.get("economy.not-enough", "amount", sm.money(price));
         }
-        if (n <= 0) { err[0] = limit != null ? limit : "<red>You can't buy that right now."; return 0; }
+        if (n <= 0) { err[0] = limit != null ? limit : m.get("customer.error.cannot-buy"); return 0; }
 
         // 3) charge the customer, pay the owner (refund the customer if the owner can't be paid)
         double total = Text.round2(price * n);
         EconomyResponse taken = econ.withdrawPlayer(p, total);
-        if (!taken.transactionSuccess()) { err[0] = "<red>The payment failed."; return 0; }
+        if (!taken.transactionSuccess()) { err[0] = m.get("economy.payment-failed"); return 0; }
         OfflinePlayer owner = Bukkit.getOfflinePlayer(shop.getOwner());
         EconomyResponse paid = econ.depositPlayer(owner, total);
         if (!paid.transactionSuccess()) {
@@ -270,7 +273,7 @@ public class CustomerTradeListener implements Listener {
                 plugin.getLogger().severe("Could not refund " + total + " to " + p.getName()
                         + " after the shop owner's payment failed - please check their balance!");
             }
-            err[0] = "<red>The seller can't receive payment right now. You were not charged.";
+            err[0] = m.get("customer.error.seller-cannot-receive");
             return 0;
         }
 
@@ -284,18 +287,19 @@ public class CustomerTradeListener implements Listener {
 
     // ------------------------------------------------------------ item trades
 
-    /** @return null on success, otherwise an error message. */
-    private String tryTrade(Player p, Shop shop, Trade t, MerchantInventory mi) {
+    /** @return null on success, otherwise the error to show. */
+    private Component tryTrade(Player p, Shop shop, Trade t, MerchantInventory mi) {
+        var m = plugin.msg();
         int[] slots = matchSlots(t, mi);
-        if (slots == null) return "<red>You don't have the required items.";
+        if (slots == null) return m.get("customer.error.missing-items");
 
         ItemStack res = t.getResult();
         Inventory st = shop.getStorage();
-        if (!st.containsAtLeast(res, res.getAmount())) return "<red>This item is out of stock.";
+        if (!st.containsAtLeast(res, res.getAmount())) return m.get("customer.error.out-of-stock");
 
         ItemStack[] pays = t.getPay2() == null ? new ItemStack[]{t.getPay1()} : new ItemStack[]{t.getPay1(), t.getPay2()};
-        if (!InvUtil.canFit(st.getContents(), 54, res, pays)) return "<red>The shop's storage is full.";
-        if (!InvUtil.canFit(p.getInventory().getStorageContents(), 36, null, res)) return "<red>Your inventory is full.";
+        if (!InvUtil.canFit(st.getContents(), 54, res, pays)) return m.get("customer.error.storage-full");
+        if (!InvUtil.canFit(p.getInventory().getStorageContents(), 36, null, res)) return m.get("customer.error.inventory-full");
 
         st.removeItem(res.clone());
         for (ItemStack pay : pays) st.addItem(pay.clone());
