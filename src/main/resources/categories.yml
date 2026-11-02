@@ -1,0 +1,79 @@
+# ═══════════════════════════════════════════════════════════════════════════════════
+#  VillagerMerchants - shop categories (used by the /shops directory filter and search)
+#  /vm reload applies edits.
+#
+#  A shop belongs to every category that at least one of its offers' RESULT items matches.
+#  Items that match nothing fall into the built-in "Other" category.
+#
+#  categories:
+#    my_category:
+#      name: "Display name"       # shown in the directory
+#      icon: DIAMOND_PICKAXE      # item shown in the filter button
+#      match:                     # an item matches if ANY of these hit
+#        materials: [SHEARS]      # exact material names
+#        suffixes:  [_PICKAXE]    # material name ends with
+#        prefixes:  [RAW_]        # material name starts with
+#        contains:  [POTION]      # material name contains
+#        flags:     [EDIBLE]      # EDIBLE | ENCHANTED | BLOCK
+# ═══════════════════════════════════════════════════════════════════════════════════
+categories:
+  tools:
+    name: "Tools"
+    icon: IRON_PICKAXE
+    match:
+      suffixes: [_PICKAXE, _AXE, _SHOVEL, _HOE]
+      materials: [SHEARS, FISHING_ROD, FLINT_AND_STEEL, BRUSH, SPYGLASS, COMPASS, CLOCK, BUCKET, LAVA_BUCKET, WATER_BUCKET]
+  weapons:
+    name: "Weapons"
+    icon: IRON_SWORD
+    match:
+      suffixes: [_SWORD]
+      materials: [BOW, CROSSBOW, TRIDENT, MACE, ARROW, SPECTRAL_ARROW, TIPPED_ARROW, WIND_CHARGE]
+  armor:
+    name: "Armor"
+    icon: DIAMOND_CHESTPLATE
+    match:
+      suffixes: [_HELMET, _CHESTPLATE, _LEGGINGS, _BOOTS, _HORSE_ARMOR]
+      materials: [SHIELD, ELYTRA, WOLF_ARMOR]
+  food:
+    name: "Food"
+    icon: COOKED_BEEF
+    match:
+      flags: [EDIBLE]
+      materials: [CAKE]
+  enchants:
+    name: "Enchants"
+    icon: ENCHANTED_BOOK
+    match:
+      flags: [ENCHANTED]
+  potions:
+    name: "Potions"
+    icon: POTION
+    match:
+      contains: [POTION]
+      materials: [TIPPED_ARROW, BREWING_STAND, BLAZE_POWDER, GLASS_BOTTLE, NETHER_WART]
+  minerals:
+    name: "Ores & Minerals"
+    icon: DIAMOND
+    match:
+      contains: [_ORE]
+      suffixes: [_INGOT, _NUGGET]
+      prefixes: [RAW_]
+      materials: [DIAMOND, EMERALD, COAL, CHARCOAL, LAPIS_LAZULI, REDSTONE, QUARTZ, AMETHYST_SHARD, NETHERITE_SCRAP, ANCIENT_DEBRIS, ECHO_SHARD]
+  redstone:
+    name: "Redstone"
+    icon: REDSTONE
+    match:
+      suffixes: [_BUTTON, _PRESSURE_PLATE]
+      materials: [REDSTONE, REPEATER, COMPARATOR, OBSERVER, PISTON, STICKY_PISTON, HOPPER, DROPPER, DISPENSER, REDSTONE_TORCH, REDSTONE_LAMP, LEVER, TARGET, DAYLIGHT_DETECTOR, SLIME_BLOCK, HONEY_BLOCK, TNT, REDSTONE_BLOCK]
+  farming:
+    name: "Farming"
+    icon: WHEAT
+    match:
+      suffixes: [_SEEDS, _SAPLING]
+      materials: [WHEAT, CARROT, POTATO, BEETROOT, PUMPKIN, MELON, SUGAR_CANE, BAMBOO, COCOA_BEANS, BONE_MEAL, HAY_BLOCK, KELP, CACTUS]
+  blocks:
+    name: "Building Blocks"
+    icon: BRICKS
+    match:
+      flags: [BLOCK]

@@ -45,8 +45,8 @@ public class ShopInteractListener implements Listener {
 
         if (shop == null) {
             new RentGui(plugin, player, villager.getUniqueId()).open();
-        } else if (shop.isOwner(player.getUniqueId()) && !player.isSneaking()) {
-            new OwnerMenuGui(plugin, player, shop).open();   // sneak = preview as a customer
+        } else if (shop.isMember(player.getUniqueId()) && !player.isSneaking()) {
+            new OwnerMenuGui(plugin, player, shop).open();   // owner or staff; sneak = preview as a customer
         } else if (!shop.isActive(System.currentTimeMillis())) {
             player.sendMessage(Text.mm("<gray>This shop is closed."));
         } else {

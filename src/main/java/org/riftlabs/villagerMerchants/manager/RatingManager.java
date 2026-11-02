@@ -86,7 +86,7 @@ public class RatingManager {
     /** After a customer bought something: offer clickable stars (once in a while, and only if they haven't rated). */
     public void maybePrompt(Player p, Shop shop) {
         if (!enabled() || !cfg().getBoolean("ratings.prompt-after-purchase", true)) return;
-        if (shop.isOwner(p.getUniqueId())) return;
+        if (shop.isMember(p.getUniqueId())) return;
 
         String pk = p.getUniqueId() + "|" + shop.getId();
         long now = System.currentTimeMillis();
@@ -124,8 +124,8 @@ public class RatingManager {
             p.sendMessage(Text.mm("<red>That shop isn't open any more."));
             return;
         }
-        if (shop.isOwner(p.getUniqueId())) {
-            p.sendMessage(Text.mm("<red>You can't rate your own shop."));
+        if (shop.isMember(p.getUniqueId())) {
+            p.sendMessage(Text.mm("<red>You can't rate a shop you own or work at."));
             return;
         }
 

@@ -8,16 +8,20 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.riftlabs.villagerMerchants.commands.ShopCommand;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
+import org.riftlabs.villagerMerchants.listeners.ChatPromptListener;
 import org.riftlabs.villagerMerchants.listeners.CustomerTradeListener;
 import org.riftlabs.villagerMerchants.listeners.GuiListener;
 import org.riftlabs.villagerMerchants.listeners.JoinListener;
 import org.riftlabs.villagerMerchants.listeners.NpcLookTask;
 import org.riftlabs.villagerMerchants.listeners.PricePromptListener;
 import org.riftlabs.villagerMerchants.listeners.ShopInteractListener;
+import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.EffectManager;
 import org.riftlabs.villagerMerchants.manager.NametagManager;
+import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
+import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.manager.TeleportManager;
 import org.riftlabs.villagerMerchants.manager.TransactionManager;
 import org.riftlabs.villagerMerchants.util.CurrencyToken;
@@ -34,6 +38,10 @@ public final class VillagerMerchants extends JavaPlugin {
     private EffectManager effectManager;
     private CustomerTradeListener customerTrades;
     private PricePromptListener prompts;
+    private ChatPromptListener chatPrompts;
+    private PromotionManager promotions;
+    private StaffManager staff;
+    private CategoryRegistry categories;
     private Economy econ;
 
     @Override
@@ -53,6 +61,9 @@ public final class VillagerMerchants extends JavaPlugin {
         if (!getDataFolder().exists()) getDataFolder().mkdirs();
 
         databaseManager = new DatabaseManager(this);
+        categories = new CategoryRegistry(this);
+        promotions = new PromotionManager(this);
+        staff = new StaffManager(this);
         transactions = new TransactionManager(this, databaseManager);
         ratings = new RatingManager(this, databaseManager);
         teleports = new TeleportManager(this);
@@ -66,13 +77,16 @@ public final class VillagerMerchants extends JavaPlugin {
         transactions.load();
         ratings.load();
         shopManager.startTasks();
+        promotions.startTasks();
 
         customerTrades = new CustomerTradeListener(this);
         prompts = new PricePromptListener(this);
+        chatPrompts = new ChatPromptListener(this);
         getServer().getPluginManager().registerEvents(new GuiListener(this), this);
         getServer().getPluginManager().registerEvents(new ShopInteractListener(this), this);
         getServer().getPluginManager().registerEvents(customerTrades, this);
         getServer().getPluginManager().registerEvents(prompts, this);
+        getServer().getPluginManager().registerEvents(chatPrompts, this);
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
 
         if (getConfig().getBoolean("npc.look-at-players", true)) {
@@ -114,6 +128,9 @@ public final class VillagerMerchants extends JavaPlugin {
         addPermission(pm, "villagermerchants.shops", PermissionDefault.TRUE);
         addPermission(pm, "villagermerchants.shops.teleport", PermissionDefault.TRUE);
         addPermission(pm, "villagermerchants.shops.bypass", PermissionDefault.OP);
+        addPermission(pm, "villagermerchants.sales", PermissionDefault.TRUE);
+        addPermission(pm, "villagermerchants.promote", PermissionDefault.TRUE);
+        addPermission(pm, "villagermerchants.staff", PermissionDefault.TRUE);
     }
 
     private void addPermission(PluginManager pm, String node, PermissionDefault def) {
@@ -135,4 +152,8 @@ public final class VillagerMerchants extends JavaPlugin {
     public EffectManager getEffectManager() { return effectManager; }
     public CustomerTradeListener getCustomerTrades() { return customerTrades; }
     public PricePromptListener getPrompts() { return prompts; }
+    public ChatPromptListener getChatPrompts() { return chatPrompts; }
+    public PromotionManager getPromotions() { return promotions; }
+    public StaffManager getStaff() { return staff; }
+    public CategoryRegistry getCategories() { return categories; }
 }

@@ -98,7 +98,7 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
         inv.setItem(31, Text.icon(Material.PAPER, "<white>Page " + (page + 1) + "/" + pages(),
                 "<gray>Left-click: clear slot", "<gray>Right-click: amount +1", "<gray>Shift-right: amount -1",
                 "<gray>Only trades with a payment (items or a money", "<gray>price) and a Result are live."));
-        inv.setItem(33, Text.icon(Material.NETHER_STAR, "<light_purple>Upgrades"));
+        if (shop.isOwner(player.getUniqueId())) inv.setItem(33, Text.icon(Material.NETHER_STAR, "<light_purple>Upgrades"));
         if (page + 1 < pages()) inv.setItem(35, Text.icon(Material.ARROW, "<yellow>Next page"));
     }
 
@@ -121,7 +121,7 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
                 case 27 -> { if (page > 0) { page--; render(); } }
                 case 35 -> { if (page + 1 < pages()) { page++; render(); } }
                 case 29 -> Bukkit.getScheduler().runTask(plugin, () -> new OwnerMenuGui(plugin, player, shop).open());
-                case 33 -> Bukkit.getScheduler().runTask(plugin, () -> new UpgradeGui(plugin, player, shop).open());
+                case 33 -> { if (shop.isOwner(player.getUniqueId())) Bukkit.getScheduler().runTask(plugin, () -> new UpgradeGui(plugin, player, shop).open()); }
                 default -> {}
             }
             return;

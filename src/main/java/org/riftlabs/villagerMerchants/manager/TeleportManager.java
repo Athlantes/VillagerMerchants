@@ -153,11 +153,14 @@ public class TeleportManager {
     private Location parse(String raw) {
         if (raw == null) return null;
         String[] p = raw.split(";");
-        if (p.length != 4) return null;
+        if (p.length < 4) return null;
         World w = Bukkit.getWorld(p[0]);
         if (w == null) return null;
         try {
-            return new Location(w, Integer.parseInt(p[1]) + 0.5, Integer.parseInt(p[2]), Integer.parseInt(p[3]) + 0.5);
+            return new Location(w,
+                    Double.parseDouble(p[1]),
+                    Double.parseDouble(p[2]),
+                    Double.parseDouble(p[3]));
         } catch (NumberFormatException e) {
             return null;
         }

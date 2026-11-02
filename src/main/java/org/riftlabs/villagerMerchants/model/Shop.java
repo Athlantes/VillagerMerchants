@@ -6,6 +6,8 @@ import org.riftlabs.villagerMerchants.gui.StorageHolder;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -20,6 +22,17 @@ public class Shop {
     /** Live inventory: shared by owner (view) and trade logic, so no desync/dupes. */
     private final Inventory storage;
     private boolean dirty;
+
+    // ---- staff
+    private final Map<UUID, StaffRole> staff = new LinkedHashMap<>();
+
+    // ---- sale (percent > 0 and now < saleExpiry = running; saleExpiry is kept afterwards for the cooldown)
+    private int salePercent;
+    private long saleExpiry;
+    private boolean saleListed;
+
+    // ---- featured listing
+    private long featuredUntil;
 
     public Shop(UUID id, UUID owner, long rentExpiry, String location) {
         this.id = id;
@@ -56,5 +69,92 @@ public class Shop {
         List<Trade> list = new ArrayList<>();
         for (Trade t : trades.values()) if (t.isComplete()) list.add(t);
         return list;
+    }
+
+    // ------------------------------------------------------------ staff
+
+    /** Owner or any staff member. Members can't buy from or rate the shop (no wash trading). */
+    public boolean isMember(UUID u) { return owner.equals(u) || staff.containsKey(u); }
+    public StaffRole roleOf(UUID u) { return staff.get(u); }
+    public Map<UUID, StaffRole> getStaff() { return Collections.unmodifiableMap(staff); }
+
+    /** The owner can do everything; staff can do what their role allows. */
+    public boolean can(UUID u, Perm perm) {
+        if (owner.equals(u)) return true;
+        StaffRole r = staff.get(u);
+        return r != null && r.has(perm);
+    }
+
+    public void setStaff(UUID u, StaffRole role) { staff.put(u, role); dirty = true; }
+    public boolean removeStaff(UUID u) { boolean b = staff.remove(u) != null; if (b) dirty = true; return b; }
+
+    public String serializeStaff() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<UUID, StaffRole> e : staff.entrySet()) {
+            if (sb.length() > 0) sb.append(',');
+            sb.append(e.getKey()).append(':').append(e.getValue().name());
+        }
+        return sb.toString();
+    }
+
+    public void loadStaff(String raw) {
+        staff.clear();
+        if (raw == null || raw.isBlank()) return;
+        for (String part : raw.split(",")) {
+            String[] kv = part.split(":");
+            if (kv.length != 2) continue;
+            try {
+                StaffRole r = StaffRole.parse(kv[1]);
+                if (r != null) staff.put(UUID.fromString(kv[0].trim()), r);
+            } catch (IllegalArgumentException ignored) {}
+        }
+    }
+
+    // ------------------------------------------------------------ sale
+
+    public boolean isOnSale(long now) { return salePercent > 0 && now < saleExpiry; }
+    public int getSalePercent() { return salePercent; }
+    public long getSaleExpiry() { return saleExpiry; }
+    public boolean isSaleListed() { return saleListed; }
+
+    public void startSale(int percent, long expiry, boolean listed) {
+        this.salePercent = percent;
+        this.saleExpiry = expiry;
+        this.saleListed = listed;
+        dirty = true;
+    }
+
+    /** Ends the sale now. saleExpiry is kept (set to {@code now}) so the cooldown can be measured from it. */
+    public void endSale(long now) {
+        this.salePercent = 0;
+        this.saleExpiry = Math.min(saleExpiry, now);
+        this.saleListed = false;
+        dirty = true;
+    }
+
+    public void setSaleListed(boolean listed) { this.saleListed = listed; dirty = true; }
+
+    /** Only money-priced trades can be discounted: item-for-item trades have no price to cut. */
+    public double effectivePrice(Trade t, long now) {
+        if (!t.isMoney()) return 0;
+        if (!isOnSale(now)) return t.getPrice();
+        double p = t.getPrice() * (100 - salePercent) / 100.0;
+        return Math.max(0.01, Math.round(p * 100.0) / 100.0);
+    }
+
+    // ------------------------------------------------------------ featured
+
+    public long getFeaturedUntil() { return featuredUntil; }
+    public boolean isFeatured(long now) { return now < featuredUntil; }
+    public void setFeaturedUntil(long v) { featuredUntil = v; dirty = true; }
+
+    /** Copies everything that isn't trades/storage. The NPC is respawned with a new UUID on every restart. */
+    public void copyExtrasFrom(Shop o) {
+        staff.clear();
+        staff.putAll(o.staff);
+        salePercent = o.salePercent;
+        saleExpiry = o.saleExpiry;
+        saleListed = o.saleListed;
+        featuredUntil = o.featuredUntil;
     }
 }

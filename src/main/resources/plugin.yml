@@ -10,10 +10,10 @@ commands:
   vm:
     description: VillagerMerchants main command
     aliases: [villagermerchants]
-    usage: /vm <create|remove|reload|claim>
+    usage: /vm <claim|sales|purchases|rate|sale|staff|create|remove|reload>
   shops:
     description: Browse open shops and teleport to them
-    usage: /shops
+    usage: /shops [search <item> | category <name> | sale]
 
 permissions:
   villagermerchants.admin:
@@ -31,3 +31,12 @@ permissions:
   villagermerchants.shops.bypass:
     description: No cooldown, warm-up or cost when teleporting to shops
     default: op
+  villagermerchants.sales:
+    description: Run timed sales on shops
+    default: true
+  villagermerchants.promote:
+    description: Buy featured listings
+    default: true
+  villagermerchants.staff:
+    description: Hire shop staff and co-owners
+    default: true

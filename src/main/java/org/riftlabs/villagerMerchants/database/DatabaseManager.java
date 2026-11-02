@@ -12,7 +12,8 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class DatabaseManager {
-    public record ShopRow(String id, String owner, String location, long expiry, String trades, String stock, String prices) {}
+    public record ShopRow(String id, String owner, String location, long expiry, String trades, String stock, String prices,
+                          int salePercent, long saleExpiry, boolean saleListed, long featuredUntil, String staff) {}
     public record ClaimRow(int id, String data) {}
     public record TxRow(long id, long ts, String shopId, String seller, String buyer, String buyerName,
                         String kind, String itemType, String itemName, int itemQty, int trades,
@@ -113,6 +114,11 @@ public class DatabaseManager {
                 try { s.execute("ALTER TABLE player_profiles ADD COLUMN " + col); } catch (SQLException ignored) {}
             }
             try { s.execute("ALTER TABLE shops ADD COLUMN trade_prices TEXT"); } catch (SQLException ignored) {}
+            for (String col : new String[]{
+                    "sale_percent INTEGER DEFAULT 0", "sale_expiry INTEGER DEFAULT 0", "sale_listed INTEGER DEFAULT 0",
+                    "featured_until INTEGER DEFAULT 0", "staff TEXT"}) {
+                try { s.execute("ALTER TABLE shops ADD COLUMN " + col); } catch (SQLException ignored) {}
+            }
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not initialize database tables: " + e.getMessage());
         }
@@ -129,12 +135,14 @@ public class DatabaseManager {
 
     public List<ShopRow> loadShops() {
         List<ShopRow> rows = new ArrayList<>();
-        String q = "SELECT shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices FROM shops";
+        String q = "SELECT shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices, "
+                + "sale_percent, sale_expiry, sale_listed, featured_until, staff FROM shops";
         try (Connection c = getConnection(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(q)) {
             while (rs.next()) {
                 if (rs.getString(2) == null) continue;
                 rows.add(new ShopRow(rs.getString(1), rs.getString(2), rs.getString(3),
-                        rs.getLong(4), rs.getString(5), rs.getString(6), rs.getString(7)));
+                        rs.getLong(4), rs.getString(5), rs.getString(6), rs.getString(7),
+                        rs.getInt(8), rs.getLong(9), rs.getInt(10) != 0, rs.getLong(11), rs.getString(12)));
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to load shops: " + e.getMessage());
@@ -208,7 +216,8 @@ public class DatabaseManager {
     }
 
     public void upsertShop(ShopRow r) {
-        String q = "INSERT OR REPLACE INTO shops (shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String q = "INSERT OR REPLACE INTO shops (shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices, "
+                + "sale_percent, sale_expiry, sale_listed, featured_until, staff) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
             ps.setString(1, r.id());
             ps.setString(2, r.owner());
@@ -217,6 +226,11 @@ public class DatabaseManager {
             ps.setString(5, r.trades());
             ps.setString(6, r.stock());
             ps.setString(7, r.prices());
+            ps.setInt(8, r.salePercent());
+            ps.setLong(9, r.saleExpiry());
+            ps.setInt(10, r.saleListed() ? 1 : 0);
+            ps.setLong(11, r.featuredUntil());
+            ps.setString(12, r.staff());
             ps.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to save shop " + r.id() + ": " + e.getMessage());

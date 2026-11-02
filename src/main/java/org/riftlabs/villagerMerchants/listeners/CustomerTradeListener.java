@@ -41,6 +41,8 @@ public class CustomerTradeListener implements Listener {
     private static final class Session {
         final UUID shopId;
         boolean bought;
+        /** Money prices (sale applied) as shown in the open merchant window, per live trade. */
+        double[] prices;
         Session(UUID shopId) { this.shopId = shopId; }
     }
 
@@ -62,7 +64,9 @@ public class CustomerTradeListener implements Listener {
         Merchant m = Bukkit.createMerchant(Text.mm(title));
         m.setRecipes(recipes);
         p.openMerchant(m, true);
-        sessions.put(p.getUniqueId(), new Session(shop.getId()));
+        Session session = new Session(shop.getId());
+        session.prices = sm.snapshotPrices(shop);
+        sessions.put(p.getUniqueId(), session);
     }
 
     public void closeSessions(UUID shopId) {
@@ -167,8 +171,8 @@ public class CustomerTradeListener implements Listener {
             p.sendMessage(Text.mm("<gray>This shop is closed."));
             return;
         }
-        if (shop.isOwner(p.getUniqueId())) {
-            p.sendMessage(Text.mm("<yellow>Preview mode: you can't buy from your own shop."));
+        if (shop.isMember(p.getUniqueId())) {
+            p.sendMessage(Text.mm("<yellow>Preview mode: you can't buy from a shop you own or work at."));
             return;
         }
         List<Trade> trades = shop.completeTrades();
@@ -185,12 +189,22 @@ public class CustomerTradeListener implements Listener {
             return;
         }
 
+        // The price on screen must be the price we charge: a sale may have started/ended or the owner edited
+        // a price while this window was open.
+        double unit = sm.effectivePrice(shop, trade);
+        if (trade.isMoney() && (session.prices == null || idx >= session.prices.length
+                || Math.abs(session.prices[idx] - unit) > 0.0001)) {
+            p.closeInventory();
+            p.sendMessage(Text.mm("<yellow>This shop's prices just changed. Please reopen it."));
+            return;
+        }
+
         int times = e.isShiftClick() ? 64 : 1;
         int done = 0;
         String err = null;
         if (trade.isMoney()) {
             String[] holder = new String[1];
-            done = tradeMoney(p, shop, trade, times, holder);
+            done = tradeMoney(p, shop, trade, unit, times, holder);
             err = holder[0];
         } else {
             while (done < times && (err = tryTrade(p, shop, trade, mi)) == null) done++;
@@ -200,9 +214,10 @@ public class CustomerTradeListener implements Listener {
         if (done > 0) {
             shop.setDirty(true);
             session.bought = true;
-            plugin.getTransactions().recordSale(p, shop, trade, done);
+            plugin.getTransactions().recordSale(p, shop, trade, done, unit);
             plugin.getRatings().recordPurchase(p, shop);
             merchant.setRecipes(sm.buildRecipes(shop)); // re-lock sold-out trades
+            session.prices = sm.snapshotPrices(shop);
         }
         final int selected = idx;
         Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, session, shop, selected));
@@ -217,11 +232,10 @@ public class CustomerTradeListener implements Listener {
      *
      * @return how many times the trade executed; if 0, err[0] holds the reason
      */
-    private int tradeMoney(Player p, Shop shop, Trade t, int times, String[] err) {
+    private int tradeMoney(Player p, Shop shop, Trade t, double price, int times, String[] err) {
         ShopManager sm = plugin.getShopManager();
         Economy econ = plugin.getEconomy();
         ItemStack res = t.getResult();
-        double price = t.getPrice();
         Inventory st = shop.getStorage();
 
         // 1) how many can the shop supply and the customer carry?

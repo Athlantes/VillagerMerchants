@@ -77,9 +77,14 @@ public class TransactionManager {
 
     /** Logs a completed purchase (one click = one row, even when shift-click bought many) and notifies the seller. */
     public void recordSale(Player buyer, Shop shop, Trade trade, int times) {
+        recordSale(buyer, shop, trade, times, trade.getPrice());
+    }
+
+    /** @param unitPrice what the buyer actually paid per unit (the sale price while a sale runs) */
+    public void recordSale(Player buyer, Shop shop, Trade trade, int times, double unitPrice) {
         ItemStack res = trade.getResult();
         boolean money = trade.isMoney();
-        double total = money ? Text.round2(trade.getPrice() * times) : 0.0;
+        double total = money ? Text.round2(unitPrice * times) : 0.0;
         String paid = money ? "" : paySummary(trade, times);
         UUID seller = shop.getOwner();
         Player sellerOnline = Bukkit.getPlayer(seller);

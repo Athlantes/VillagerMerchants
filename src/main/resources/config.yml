@@ -62,6 +62,7 @@ log:
 
 directory:
   hide-empty-shops: true        # only list shops that have at least one live offer
+  # categories are defined in categories.yml; /shops search <item> finds shops by what they sell
   show-coordinates: false
   teleport:
     enabled: true
@@ -80,3 +81,35 @@ customization:
   skins-enabled: true
   nametags-enabled: true
   effects-enabled: true       # particle effects tab (configured in effects.yml)
+# ── Sales: "20% off for 2 hours" ────────────────────────────────────────────────
+# Only money-priced trades are discounted (item-for-item trades have no price to cut).
+sales:
+  enabled: true
+  min-percent: 5
+  max-percent: 50
+  max-hours: 24
+  cooldown-minutes: 30          # wait after a sale ends before starting another (stops permanent "sales")
+  fee: 0.0                      # optional fee to start a sale (withdrawn, not paid to anyone)
+  percent-options: [10, 20, 30, 40, 50]            # buttons in the sale menu
+  duration-options: [30, 60, 120, 360, 720, 1440]  # minutes, buttons in the sale menu
+  banner: true                  # extra name tag line while a sale runs
+  banner-format: "<red><bold>ON SALE</bold> <yellow>-<percent>%</yellow> <gray>(<time>)</gray>"
+  effect: ""                    # effect id from effects.yml that overrides the owner's effect during a sale ('' = off)
+
+# ── Featured listings: owners pay to be pinned at the top of /shops ─────────────
+# The fee is withdrawn and not paid to anyone, so it's a pure money sink.
+featured:
+  enabled: true
+  max-slots: 5                  # shops that can be featured at the same time
+  max-stack-hours: 72           # can't buy more than this far ahead
+  packages:                     # hours: price
+    "6": 2500.0
+    "24": 8000.0
+    "72": 20000.0
+
+# ── Shop staff and co-owners ────────────────────────────────────────────────────
+# Roles: STOCKER (storage) < MANAGER (+ trades, sales, stats) < CO_OWNER (+ rent, featured listings).
+# Only the owner can cancel the shop, buy upgrades, change the NPC's look or manage staff.
+staff:
+  enabled: true
+  max-per-shop: 5

@@ -10,6 +10,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.gui.TradeEditorGui;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
+import org.riftlabs.villagerMerchants.model.Perm;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
 import org.riftlabs.villagerMerchants.util.Text;
@@ -56,8 +57,8 @@ public class PricePromptListener implements Listener {
         if (!prompts.remove(p.getUniqueId(), pr)) return; // superseded or already handled
         if (!p.isOnline()) return;
         ShopManager sm = plugin.getShopManager();
-        if (!sm.isLive(pr.shop()) || !pr.shop().isOwner(p.getUniqueId())) {
-            p.sendMessage(Text.mm("<red>That shop is no longer yours."));
+        if (!sm.isLive(pr.shop()) || !pr.shop().can(p.getUniqueId(), Perm.TRADES)) {
+            p.sendMessage(Text.mm("<red>You can no longer edit that shop's trades."));
             return;
         }
         if (System.currentTimeMillis() > pr.expires()) {

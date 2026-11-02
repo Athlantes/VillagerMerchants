@@ -17,6 +17,7 @@ import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataType;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
+import org.riftlabs.villagerMerchants.model.Perm;
 import org.riftlabs.villagerMerchants.model.PlayerProfile;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
@@ -74,6 +75,11 @@ public class ShopManager {
                 ItemStack[] fit = new ItemStack[54];
                 System.arraycopy(stock, 0, fit, 0, Math.min(stock.length, 54));
                 s.getStorage().setContents(fit);
+
+                s.startSale(r.salePercent(), r.saleExpiry(), r.saleListed());
+                s.setFeaturedUntil(r.featuredUntil());
+                s.loadStaff(r.staff());
+                s.setDirty(false);
 
                 shops.put(s.getId(), s);
 
@@ -135,6 +141,7 @@ public class ShopManager {
 
                 Shop updatedShop = new Shop(npc.getUniqueId(), shop.getOwner(), shop.getRentExpiry(), shop.getLocation());
                 updatedShop.getStorage().setContents(shop.getStorage().getContents());
+                updatedShop.copyExtrasFrom(shop);
                 for (Map.Entry<Integer, Trade> entry : shop.getTrades().entrySet()) {
                     updatedShop.setTrade(entry.getKey(), entry.getValue());
                 }
@@ -180,7 +187,8 @@ public class ShopManager {
         }
         return new DatabaseManager.ShopRow(s.getId().toString(), s.getOwner().toString(), s.getLocation(),
                 s.getRentExpiry(), ItemCodec.encode(arr), ItemCodec.encode(s.getStorage().getContents()),
-                encodePrices(map));
+                encodePrices(map), s.getSalePercent(), s.getSaleExpiry(), s.isSaleListed(), s.getFeaturedUntil(),
+                s.serializeStaff());
     }
 
     private static String encodePrices(Map<Integer, Trade> trades) {
@@ -280,18 +288,27 @@ public class ShopManager {
             Skins.apply(v, pr.getSkinType(), pr.getSkinProfession());
 
             if (s.isActive(System.currentTimeMillis())) {
-                String rating = plugin.getRatings() == null ? "" : plugin.getRatings().nametagSuffix(s);
-                String customFormat = pr.getEquippedNametagFormat();
-
-                String personalizedFormat = customFormat.replace("<bold>", "<bold>" + ownerName(s.getOwner()) + "'s<br>");
-                personalizedFormat = personalizedFormat.replace("Available Shop", "Shop");
-
-                plugin.getNametagManager().spawnNametag(v, personalizedFormat + rating);
-                plugin.getEffectManager().set(v, pr.getEquippedEffect());
+                plugin.getNametagManager().spawnNametag(v, activeNametagFormat(s));
+                plugin.getEffectManager().set(v, activeEffectId(s));
             } else {
                 plugin.getNametagManager().spawnNametag(v, "<gray>Closed Shop</gray>");
             }
         }
+    }
+
+    /** Name tag text of an open shop: owner name, rating and (while a sale runs) the ON SALE banner. */
+    public String activeNametagFormat(Shop s) {
+        PlayerProfile pr = getProfile(s.getOwner());
+        String rating = plugin.getRatings() == null ? "" : plugin.getRatings().nametagSuffix(s);
+        String personalized = pr.getEquippedNametagFormat().replace("<bold>", "<bold>" + ownerName(s.getOwner()) + "'s<br>");
+        personalized = personalized.replace("Available Shop", "Shop");
+        String banner = plugin.getPromotions() == null ? "" : plugin.getPromotions().nametagBanner(s);
+        return personalized + rating + banner;
+    }
+
+    public String activeEffectId(Shop s) {
+        String own = getProfile(s.getOwner()).getEquippedEffect();
+        return plugin.getPromotions() == null ? own : plugin.getPromotions().effectFor(s, own);
     }
 
     public void refreshNameTag(UUID npc) {
@@ -338,7 +355,11 @@ public class ShopManager {
     }
 
     public boolean extendRent(Player p, Shop shop) {
-        PlayerProfile prof = getProfile(p.getUniqueId());
+        if (!shop.can(p.getUniqueId(), Perm.BILLING)) {
+            p.sendMessage(Text.mm("<red>You can't pay rent for this shop."));
+            return false;
+        }
+        PlayerProfile prof = getProfile(shop.getOwner());   // the shop's upgrades apply, whoever pays
         long now = System.currentTimeMillis();
         long addMs = cfg().getInt("rent.base-days", 7) * DAY;
         long base = Math.max(now, shop.getRentExpiry());
@@ -357,7 +378,8 @@ public class ShopManager {
         return true;
     }
 
-    private boolean charge(Player p, double price) {
+    /** Withdraws money from the player (nothing is paid to anyone: a money sink). */
+    public boolean charge(Player p, double price) {
         Economy econ = plugin.getEconomy();
         if (!econ.has(p, price)) {
             p.sendMessage(Text.mm("<red>You need " + money(price) + " for that."));
@@ -520,7 +542,19 @@ public class ShopManager {
 
     public boolean moneyTradesEnabled() { return cfg().getBoolean("money.enabled", true); }
 
+    /** Price a customer pays right now for a money trade (sale applied). */
+    public double effectivePrice(Shop shop, Trade t) { return shop.effectivePrice(t, System.currentTimeMillis()); }
+
+    /** Per live trade (same order as {@link Shop#completeTrades()}): the money price at this moment, 0 for item trades. */
+    public double[] snapshotPrices(Shop shop) {
+        List<Trade> trades = shop.completeTrades();
+        double[] out = new double[trades.size()];
+        for (int i = 0; i < out.length; i++) out[i] = effectivePrice(shop, trades.get(i));
+        return out;
+    }
+
     public List<MerchantRecipe> buildRecipes(Shop shop) {
+        long now = System.currentTimeMillis();
         List<MerchantRecipe> list = new ArrayList<>();
         for (Trade t : shop.completeTrades()) {
             ItemStack res = t.getResult();
@@ -528,7 +562,8 @@ public class ShopManager {
             MerchantRecipe r = new MerchantRecipe(res.clone(), inStock ? 0 : 1, inStock ? 1_000_000 : 1, false, 0, 0f);
             r.setIgnoreDiscounts(true);
             if (t.isMoney()) {
-                r.addIngredient(CurrencyToken.create(tokenMaterial(), money(t.getPrice())));
+                String label = money(shop.effectivePrice(t, now)) + (shop.isOnSale(now) ? " (-" + shop.getSalePercent() + "%)" : "");
+                r.addIngredient(CurrencyToken.create(tokenMaterial(), label));
             } else {
                 r.addIngredient(t.getPay1().clone());
                 if (t.getPay2() != null) r.addIngredient(t.getPay2().clone());
