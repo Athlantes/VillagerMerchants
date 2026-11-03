@@ -5,12 +5,13 @@ api-version: '1.21'
 author: RiftLabs
 description: Premium player-rented villager shops with native merchant UI.
 depend: [Vault]
+softdepend: [Multiverse-Core, ItemsAdder, Oraxen, MMOItems, MythicLib, WorldGuard, GriefPrevention, Lands]
 
 commands:
   vm:
     description: VillagerMerchants main command
     aliases: [villagermerchants]
-    usage: /vm <claim|sales|purchases|rate|sale|staff|create|remove|reload>
+    usage: /vm <claim|sales|purchases|rate|sale|staff|create|remove|reload|suspicious|protection>
   shops:
     description: Browse open shops and teleport to them
     usage: /shops [search <item> | category <name> | sale]
@@ -40,10 +41,12 @@ permissions:
       villagermerchants.effect.*: true
       villagermerchants.maxshops.unlimited: true
       villagermerchants.maxstaff.unlimited: true
+      villagermerchants.alerts: true
+      villagermerchants.bypass.tradecooldown: true
 
   # ── Admin ──
   villagermerchants.admin:
-    description: All admin commands (create / remove / reload / effect / log)
+    description: All admin commands (create / remove / reload / effect / log / suspicious / protection)
     default: op
     children:
       villagermerchants.admin.create: true
@@ -51,6 +54,8 @@ permissions:
       villagermerchants.admin.reload: true
       villagermerchants.admin.effect: true
       villagermerchants.admin.log: true
+      villagermerchants.admin.suspicious: true
+      villagermerchants.admin.protection: true
   villagermerchants.admin.create:
     description: /vm create - place a shop NPC
     default: op
@@ -66,6 +71,23 @@ permissions:
   villagermerchants.admin.log:
     description: /vm log <player> - read anybody's transaction log
     default: op
+  villagermerchants.admin.suspicious:
+    description: /vm suspicious - read the anti-abuse log
+    default: op
+  villagermerchants.admin.protection:
+    description: /vm protection - show the region and claim rules and test your location
+    default: op
+
+  # ── Anti-abuse ──
+  villagermerchants.alerts:
+    description: Get an in-game alert whenever something suspicious is logged
+    default: op
+  villagermerchants.bypass.tradecooldown:
+    description: Exempt from the purchase cooldown and purchases-per-window cap
+    default: op
+  villagermerchants.bypass.protection:
+    description: Exempt from the WorldGuard region and claim-plugin rules when placing or renting shops. Not part of villagermerchants.*, so ops are restricted too until you grant it.
+    default: false
 
   # ── Core features. These default to everyone, or to ops only with "permissions.strict: true" in config.yml ──
   villagermerchants.use:

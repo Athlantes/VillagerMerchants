@@ -47,7 +47,7 @@ public final class Access {
             "customize.skins", "customize.nametags", "customize.effects");
 
     /** Sub-actions of /vm that need villagermerchants.admin or villagermerchants.admin.<action>. */
-    public static final List<String> ADMIN_ACTIONS = List.of("create", "remove", "reload", "effect", "log");
+    public static final List<String> ADMIN_ACTIONS = List.of("create", "remove", "reload", "effect", "log", "suspicious", "protection");
 
     private final VillagerMerchants plugin;
 
@@ -79,6 +79,15 @@ public final class Access {
     public boolean bypassCooldown(CommandSender p) { return has(p, "shops.bypass") || has(p, "shops.bypass.cooldown"); }
     public boolean bypassWarmup(CommandSender p) { return has(p, "shops.bypass") || has(p, "shops.bypass.warmup"); }
     public boolean bypassCost(CommandSender p) { return has(p, "shops.bypass") || has(p, "shops.bypass.cost"); }
+
+    // ------------------------------------------------------------ anti-abuse
+
+    /** Exempt from the purchase cooldown and the purchases-per-window cap. */
+    public boolean bypassTradeCooldown(CommandSender p) { return has(p, "bypass.tradecooldown"); }
+    /** Exempt from the WorldGuard / claim-plugin location rules when placing or renting shops. */
+    public boolean bypassProtection(CommandSender p) { return has(p, "bypass.protection"); }
+    /** Receives in-game alerts when something suspicious is logged. */
+    public boolean canSeeAlerts(CommandSender p) { return has(p, "alerts"); }
 
     // ------------------------------------------------------------ admin
 

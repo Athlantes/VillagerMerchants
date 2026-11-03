@@ -772,6 +772,8 @@ cmd:
     - "<gold>/vm rate <1-5> <gray>- rate the shop you last bought from"
   help-admin:
     - "<gold>/vm create | remove | reload | effect | log <player> [page] <gray>(admin)"
+    - "<gold>/vm suspicious [count] <gray>- recent anti-abuse flags (admin)"
+    - "<gold>/vm protection <gray>- show region/claim rules and test your spot (admin)"
   reloaded: "<prefix><green>Config, language, effects and categories reloaded."
   npc-created: "<prefix><green>Shop NPC created & saved to database!"
   npc-removed: "<prefix><green>Shop NPC removed."
@@ -826,3 +828,31 @@ cmd:
   rate:
     buy-first: "<prefix><red>Buy something from a shop first, then rate it."
     usage: "<prefix><red>Usage: /vm rate <1-5>"
+
+anti-abuse:
+  banned-item: "<prefix><red>That item can't be used in shop trades."
+  price-too-high: "<prefix><red>That's above the maximum price for this item: <white><max></white> for the stack (<white><unit></white> each). Try again, or type <white><cancel></white>."
+  price-too-high-editor: "<prefix><red>A price of <white><price></white> is above the maximum of <white><max></white> for this item."
+  trade-unavailable: "<prefix><red>This trade isn't available."
+  cooldown: "<red>Slow down! <white><seconds>s</white> until your next purchase."
+  rate-limited: "<red>You're buying too fast. Wait a few seconds."
+  alert: "<red>[VM] <gold><type></gold> <gray>-</gray> <white><player></white> <gray>(shop of <owner>):</gray> <yellow><detail>"
+  suspicious:
+    empty: "<prefix><gray>No suspicious activity has been logged."
+    header: "<gold>--- Suspicious activity <gray>(last <shown> of <total>, full list in <file>)</gray> ---"
+    line: "<gray><entry>"
+
+protection:
+  denied:
+    region: "<prefix><red>Shops can only be set up inside: <white><regions></white>."
+    flag: "<prefix><red>Shops aren't allowed here."
+    build: "<prefix><red>You can't build here, so you can't set up a shop here."
+    claimed: "<prefix><red>A shop can't be inside <white><plugin></white> claims (this one belongs to <white><owner></white>)."
+    no-trust: "<prefix><red>You need build trust in this <white><plugin></white> claim (<white><owner></white>) to set up a shop here."
+    unclaimed: "<prefix><red>Shops here must be inside a <white><plugin></white> claim."
+    error: "<prefix><red>Couldn't verify whether a shop is allowed here. Try again, or ask a staff member."
+  status:
+    header: "<gold>--- Shop location rules ---"
+    line: "<gray><name>: <white><value>"
+    here-ok: "<prefix><green>A shop is allowed where you're standing."
+    here-denied: "<prefix><red>A shop is NOT allowed where you're standing:"

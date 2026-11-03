@@ -105,6 +105,12 @@ prompts:
 trading:
   shift-click-max: 64      # how many times shift-clicking a trade buys it at once
 
+custom-items:
+  # ItemsAdder / Oraxen / MMOItems: treat copies of the same custom item as one product, even when their
+  # rolled stats or durability differ. Each item is still stored and handed over with its own exact data.
+  # false = strict matching (isSimilar) for everything.
+  match-by-id: true
+
 money:
   enabled: true                 # allow money-priced trades (shift-left-click "Payment 1" in the trade editor)
   token-material: EMERALD       # item shown as the price inside the trading UI (display only, never given out)
@@ -114,6 +120,91 @@ money:
     k: 1000
     m: 1000000
     b: 1000000000
+
+# ── Anti-abuse ──────────────────────────────────────────────────────────────────
+# Rules that keep shops from being used to launder items or money. Trades that break a rule can't be saved in the
+# editor, and trades that already exist (saved before a rule changed) stay in the shop but are LOCKED for customers.
+# /vm reload applies changes. Texts are under "anti-abuse:" in the language file.
+anti-abuse:
+  enabled: true
+
+  blacklist:
+    creative-only: true         # built-in list of items you can't get in survival (bedrock, command blocks, barriers,
+                                # spawners, spawn eggs, infested blocks, debug stick, ...)
+    # Extra banned items. Material names, case-insensitive. '*' is a wildcard:  "*_SHULKER_BOX", "NETHERITE_*"
+    materials: []
+    # materials: [TNT, "*_SHULKER_BOX", ENCHANTED_GOLDEN_APPLE]
+    # ItemsAdder / Oraxen / MMOItems ids (the same id format used in the transaction log), case-insensitive
+    custom-items: []
+
+  # Highest price for ONE unit of the item being sold. A trade selling 16 of an item may cost up to 16 x the cap.
+  # 0 = no cap. Applies to money-priced trades; item-for-item trades have no price to cap.
+  max-unit-price:
+    default: 0
+    # Per item (material name or custom-item id). A value of 0 means "no cap for this item".
+    overrides: {}
+    # overrides:
+    #   DIAMOND: 2000
+    #   NETHERITE_INGOT: 25000
+    #   ELYTRA: 0
+
+  # Trade-spam protection. Players with villagermerchants.bypass.tradecooldown are exempt.
+  cooldown:
+    purchase-ms: 750            # minimum time between a player's purchase clicks (0 = off)
+    max-purchases: 30           # purchase clicks allowed per window (0 = off)
+    window-seconds: 10
+
+  # What goes into suspicious.log, the console, and the /vm suspicious list.
+  suspicious:
+    log-file: suspicious.log    # inside plugins/VillagerMerchants/ (plain file name only)
+    console: true               # also print to the server console
+    alert-staff: true           # tell online players with villagermerchants.alerts
+    memory-entries: 200         # how many recent entries /vm suspicious can show
+    throttle-seconds: 5         # drop repeats of the same noisy event (blocked clicks, rate limit) from one player
+    high-value: 1000000         # one purchase paying at least this much is logged (0 = off)
+    repeat-pair:                # the same buyer purchasing from the same shop owner over and over (wash trading)
+      count: 15                 # purchases (clicks) ...
+      window-minutes: 60        # ... within this time (count 0 = off)
+    same-ip: true               # buyer and shop owner online from the same IP. A lead, not proof: families and
+                                # shared networks trigger it too.
+
+# ── Region and claim protection ─────────────────────────────────────────────────
+# Where shops may be placed and rented, and who may do it. Checked when an admin runs /vm create and when a player
+# rents a shop NPC (before they are charged); the NPC's location is what is checked. Every rule you turn on must
+# pass. Shops that already exist are not touched when you change rules. /vm reload applies changes, and
+# /vm protection shows what is enforced and what the rules say about the spot you are standing on.
+# Players with villagermerchants.bypass.protection skip all of it (not given to ops by default).
+protection:
+  enabled: true
+  on-error: deny                # what to do when a check can't be completed (a hook threw, or Lands' API isn't
+                                # recognised): deny = refuse, allow = let it through
+  apply-to-admin-create: true   # false = only the rent check runs; /vm create is unrestricted
+
+  worldguard:
+    enabled: true
+    # Shops are only allowed inside one of these regions. Empty = any region (or none) is fine.
+    # Use "world:region" to tie a region name to one world.
+    allowed-regions: []
+    # allowed-regions: [market, "world_nether:bazaar"]
+    # The custom region flag "vm-shops" (registered by this plugin):
+    #   off     = ignore the flag
+    #   require = shops only where a region sets it:   /rg flag market vm-shops allow
+    #   block   = shops everywhere except where set:   /rg flag spawn vm-shops deny
+    flag: "off"            # quoted on purpose: a bare off is read as false by YAML
+    # The player placing / renting must be allowed to build at that spot (region owner/member, bypass permission).
+    require-build: false
+
+  # GriefPrevention and Lands share the same options (keep "off" in quotes):
+  #   mode: off            - ignore this plugin
+  #         deny-claimed   - no shops inside any claim
+  #         require-trust  - inside a claim the player needs build trust there; elsewhere see allow-unclaimed
+  griefprevention:
+    mode: "off"
+    allow-unclaimed: true       # false = the spot must be inside a claim
+    allow-admin-claims: true    # GriefPrevention admin claims (spawn, markets) always pass
+  lands:
+    mode: "off"
+    allow-unclaimed: true
 
 notifications:
   enabled: true

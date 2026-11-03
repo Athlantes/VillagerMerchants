@@ -86,6 +86,10 @@ public final class Text {
             String n = plain(meta.displayName());
             if (!n.isBlank()) return n;
         }
+        if (meta != null && meta.hasItemName()) {
+            String n = plain(meta.itemName());
+            if (!n.isBlank()) return n;
+        }
         return pretty(it.getType().name());
     }
 

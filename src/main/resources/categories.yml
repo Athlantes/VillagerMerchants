@@ -14,7 +14,8 @@
 #        suffixes:  [_PICKAXE]    # material name ends with
 #        prefixes:  [RAW_]        # material name starts with
 #        contains:  [POTION]      # material name contains
-#        flags:     [EDIBLE]      # EDIBLE | ENCHANTED | BLOCK
+#        flags:     [EDIBLE]      # EDIBLE | ENCHANTED | BLOCK | CUSTOM (any ItemsAdder/Oraxen/MMOItems item)
+#        custom-ids: ["oraxen:*scythe*", "mmoitems:SWORD:*"]   # custom item id patterns, * = wildcard
 # ═══════════════════════════════════════════════════════════════════════════════════
 categories:
   tools:
@@ -77,3 +78,8 @@ categories:
     icon: BRICKS
     match:
       flags: [BLOCK]
+  custom:
+    name: "Custom Items"
+    icon: NETHER_STAR
+    match:
+      flags: [CUSTOM]

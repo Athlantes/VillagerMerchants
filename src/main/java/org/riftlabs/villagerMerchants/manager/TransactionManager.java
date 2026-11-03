@@ -15,6 +15,7 @@ import org.riftlabs.villagerMerchants.database.DatabaseManager.TxRow;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
 import org.riftlabs.villagerMerchants.util.Messages;
+import org.riftlabs.villagerMerchants.util.ItemMatch;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.time.Instant;
@@ -97,7 +98,7 @@ public class TransactionManager {
 
         TxRow row = new TxRow(0L, System.currentTimeMillis(), shop.getId().toString(), seller.toString(),
                 buyer.getUniqueId().toString(), buyer.getName(), money ? "MONEY" : "ITEM",
-                res.getType().name(), Text.itemName(res), res.getAmount() * times, times, total, paid);
+                ItemMatch.logType(res), Text.itemName(res), res.getAmount() * times, times, total, paid);
 
         // Already seen if they were online for it (or notifications are off entirely).
         boolean seen = sellerOnline != null || !notifyOn;

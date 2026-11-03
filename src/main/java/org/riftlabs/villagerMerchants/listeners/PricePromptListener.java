@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.gui.TradeEditorGui;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
@@ -83,6 +84,21 @@ public class PricePromptListener implements Listener {
             plugin.msg().send(p, "price-prompt.out-of-range", "min", sm.money(min), "max", sm.money(max));
             rearm(p, pr);
             return;
+        }
+
+        // Anti-abuse: price cap for the item being sold (if the result is already set; otherwise the editor and the
+        // purchase check enforce it as soon as it is).
+        Trade existing = pr.shop().getTrade(pr.idx());
+        ItemStack result = existing == null ? null : existing.getResult();
+        if (result != null) {
+            double cap = plugin.getAntiAbuse().maxTotal(result);
+            if (price > cap + 0.0001) {
+                plugin.getAntiAbuse().logBlockedPrice(p, pr.shop(), result, price, cap);
+                plugin.msg().send(p, "anti-abuse.price-too-high", "max", sm.money(cap),
+                        "unit", sm.money(plugin.getAntiAbuse().unitCap(result)), "cancel", plugin.msg().raw("prompts.cancel-word"));
+                rearm(p, pr);
+                return;
+            }
         }
 
         Trade t = pr.shop().getOrCreateTrade(pr.idx());

@@ -23,6 +23,7 @@ import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
 import org.riftlabs.villagerMerchants.util.CurrencyToken;
 import org.riftlabs.villagerMerchants.util.ItemCodec;
+import org.riftlabs.villagerMerchants.util.ItemMatch;
 import org.riftlabs.villagerMerchants.util.Skins;
 import org.riftlabs.villagerMerchants.util.Text;
 
@@ -93,6 +94,18 @@ public class ShopManager {
         plugin.getLogger().info("Loaded " + shops.size() + " rented shops and dynamically spawned their NPCs.");
     }
 
+    /** Shops whose world was not loaded when the plugin started, by world name. */
+    private final Map<String, List<Shop>> pendingWorlds = new HashMap<>();
+
+    /** Called when a world loads: spawns the NPCs of shops that were waiting for it. */
+    public void onWorldLoad(World world) {
+        List<Shop> waiting = pendingWorlds.remove(world.getName());
+        if (waiting == null) return;
+        for (Shop s : waiting) {
+            if (shops.get(s.getId()) == s) spawnDynamicNpc(s);   // skip shops removed in the meantime
+        }
+    }
+
     private void spawnDynamicNpc(Shop shop) {
         String locStr = shop.getLocation();
         if (locStr == null || locStr.equals("unknown")) return;
@@ -101,7 +114,13 @@ public class ShopManager {
         if (parts.length < 4) return;
 
         World world = Bukkit.getWorld(parts[0]);
-        if (world == null) return;
+        if (world == null) {
+            // e.g. a Multiverse world that loads after this plugin: spawn the NPC when the world appears
+            pendingWorlds.computeIfAbsent(parts[0], k -> new ArrayList<>()).add(shop);
+            plugin.getLogger().warning("World '" + parts[0] + "' is not loaded yet; the shop NPC at "
+                    + locStr + " will spawn when it loads.");
+            return;
+        }
 
         try {
             double x = Double.parseDouble(parts[1]);
@@ -338,6 +357,13 @@ public class ShopManager {
         int limit = plugin.access().maxShops(p);   // rank-based: villagermerchants.maxshops.<n>
         if (countOwned(p.getUniqueId()) >= limit) {
             plugin.msg().send(p, "shop.rent.max-shops", "max", Access.cap(limit));
+            return false;
+        }
+        // Region / claim rules for where this NPC stands, checked before the player is charged.
+        Entity npcEntity = Bukkit.getEntity(npcId);
+        var verdict = plugin.getProtection().checkRent(p, npcEntity == null ? null : npcEntity.getLocation());
+        if (!verdict.allowed()) {
+            verdict.send(plugin.msg(), p);
             return false;
         }
         PlayerProfile prof = getProfile(p.getUniqueId());
@@ -582,7 +608,8 @@ public class ShopManager {
         List<MerchantRecipe> list = new ArrayList<>();
         for (Trade t : shop.completeTrades()) {
             ItemStack res = t.getResult();
-            boolean inStock = shop.getStorage().containsAtLeast(res, res.getAmount());
+            // a trade that breaks the anti-abuse rules stays in the list (so recipe index == trade index) but is locked
+            boolean inStock = ItemMatch.count(shop.getStorage(), res) >= res.getAmount() && !plugin.getAntiAbuse().isBlocked(t);
             MerchantRecipe r = new MerchantRecipe(res.clone(), inStock ? 0 : 1, inStock ? 1_000_000 : 1, false, 0, 0f);
             r.setIgnoreDiscounts(true);
             if (t.isMoney()) {

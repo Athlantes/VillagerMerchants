@@ -11,6 +11,7 @@ import org.bukkit.inventory.meta.PotionMeta;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
+import org.riftlabs.villagerMerchants.util.CustomItems;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.io.File;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * What a shop sells. Categories are defined in categories.yml and worked out from the result items of a
@@ -32,10 +34,18 @@ public class CategoryRegistry {
 
     public record Category(String id, String name, Material icon, Set<String> materials, List<String> suffixes,
                            List<String> prefixes, List<String> contains,
-                           boolean edible, boolean enchanted, boolean block) {
+                           boolean edible, boolean enchanted, boolean block,
+                           List<Pattern> customIds, boolean anyCustom) {
 
         public boolean matches(ItemStack it) {
             if (it == null || it.getType().isAir()) return false;
+            if (anyCustom || !customIds.isEmpty()) {
+                String key = CustomItems.keyOf(it);
+                if (key != null) {
+                    if (anyCustom) return true;
+                    for (Pattern p : customIds) if (p.matcher(key).matches()) return true;
+                }
+            }
             Material m = it.getType();
             String n = m.name();
             if (materials.contains(n)) return true;
@@ -51,7 +61,7 @@ public class CategoryRegistry {
     private final VillagerMerchants plugin;
     private final Map<String, Category> categories = new LinkedHashMap<>();
     private final Category other = new Category(OTHER_ID, "Other", Material.CHEST, Set.of(), List.of(), List.of(),
-            List.of(), false, false, false);
+            List.of(), false, false, false, List.of(), false);
 
     public CategoryRegistry(VillagerMerchants plugin) {
         this.plugin = plugin;
@@ -78,10 +88,25 @@ public class CategoryRegistry {
                         m == null ? List.of() : new ArrayList<>(upper(m.getStringList("suffixes"))),
                         m == null ? List.of() : new ArrayList<>(upper(m.getStringList("prefixes"))),
                         m == null ? List.of() : new ArrayList<>(upper(m.getStringList("contains"))),
-                        flags.contains("EDIBLE"), flags.contains("ENCHANTED"), flags.contains("BLOCK")));
+                        flags.contains("EDIBLE"), flags.contains("ENCHANTED"), flags.contains("BLOCK"),
+                        m == null ? List.of() : globs(m.getStringList("custom-ids")), flags.contains("CUSTOM")));
             }
         }
         categories.put(OTHER_ID, other);
+    }
+
+    /** "oraxen:*scythe*" style patterns (only * is special, case-insensitive) matched against the custom item id. */
+    private static List<Pattern> globs(List<String> in) {
+        List<Pattern> out = new ArrayList<>();
+        for (String g : in) {
+            StringBuilder re = new StringBuilder();
+            for (String part : g.trim().split("\\*", -1)) {
+                if (re.length() > 0 || g.trim().startsWith("*")) re.append(".*");
+                re.append(Pattern.quote(part));
+            }
+            out.add(Pattern.compile(re.toString(), Pattern.CASE_INSENSITIVE));
+        }
+        return out;
     }
 
     private static Set<String> upper(List<String> in) {
@@ -133,6 +158,8 @@ public class CategoryRegistry {
         if (it == null) return "";
         StringBuilder sb = new StringBuilder();
         sb.append(Text.itemName(it)).append(' ').append(Text.pretty(it.getType().name()));
+        String customKey = CustomItems.keyOf(it);   // e.g. oraxen:ruby_scythe -> "oraxen ruby scythe"
+        if (customKey != null) sb.append(' ').append(customKey.replace(':', ' '));
         ItemMeta meta = it.getItemMeta();
         if (meta != null) {
             for (Enchantment e : meta.getEnchants().keySet()) sb.append(' ').append(e.getKey().getKey());

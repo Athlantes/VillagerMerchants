@@ -92,6 +92,8 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             case "create" -> {
                 if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
                 Location loc = p.getLocation();
+                var verdict = plugin.getProtection().checkCreate(p, loc);
+                if (!verdict.allowed()) { verdict.send(plugin.msg(), p); return true; }
                 Villager npc = (Villager) p.getWorld().spawnEntity(loc, EntityType.VILLAGER);
                 npc.setVillagerType(Villager.Type.PLAINS);
                 npc.setProfession(Villager.Profession.NONE);
@@ -160,6 +162,24 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 } else {
                     plugin.msg().send(p, "cmd.effect.usage");
                 }
+            }
+            case "protection" -> {
+                var pm = plugin.getProtection();
+                var m = plugin.msg();
+                m.send(sender, "protection.status.header");
+                for (String[] row : pm.status()) m.send(sender, "protection.status.line", "name", row[0], "value", row[1]);
+                if (sender instanceof Player p) {
+                    var v = pm.test(p, p.getLocation());   // what the rules say about the spot you are standing on
+                    if (v.allowed()) { m.send(p, "protection.status.here-ok"); }
+                    else { m.send(p, "protection.status.here-denied"); v.send(m, p); }
+                }
+            }
+            case "suspicious" -> {
+                int count = 10;
+                if (args.length > 1) {
+                    try { count = Math.max(1, Math.min(100, Integer.parseInt(args[1]))); } catch (NumberFormatException ignored) {}
+                }
+                plugin.getAntiAbuse().show(sender, count);
             }
             case "log" -> {
                 if (args.length < 2) { plugin.msg().send(sender, "cmd.log.usage"); return true; }

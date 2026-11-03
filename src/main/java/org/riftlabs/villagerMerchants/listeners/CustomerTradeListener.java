@@ -20,12 +20,14 @@ import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.MerchantInventory;
 import org.bukkit.inventory.MerchantRecipe;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
+import org.riftlabs.villagerMerchants.manager.AntiAbuse;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
 import org.riftlabs.villagerMerchants.util.CurrencyToken;
 import org.riftlabs.villagerMerchants.util.InvUtil;
+import org.riftlabs.villagerMerchants.util.ItemMatch;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.*;
@@ -98,7 +100,10 @@ public class CustomerTradeListener implements Listener {
     }
 
     @EventHandler
-    public void onQuit(PlayerQuitEvent e) { sessions.remove(e.getPlayer().getUniqueId()); }
+    public void onQuit(PlayerQuitEvent e) {
+        sessions.remove(e.getPlayer().getUniqueId());
+        plugin.getAntiAbuse().forget(e.getPlayer().getUniqueId());
+    }
 
     /**
      * A money trade has no payment items, and the vanilla client recalculates the result slot from the
@@ -191,6 +196,14 @@ public class CustomerTradeListener implements Listener {
             return;
         }
 
+        // Anti-abuse: a trade with a banned item, or priced above the cap, is locked even if it was saved earlier.
+        AntiAbuse.Problem problem = plugin.getAntiAbuse().check(trade);
+        if (problem != AntiAbuse.Problem.NONE) {
+            plugin.getAntiAbuse().logBlockedPurchase(p, shop, trade, problem);
+            plugin.msg().send(p, "anti-abuse.trade-unavailable");
+            return;
+        }
+
         // The price on screen must be the price we charge: a sale may have started/ended or the owner edited
         // a price while this window was open.
         double unit = sm.effectivePrice(shop, trade);
@@ -200,6 +213,9 @@ public class CustomerTradeListener implements Listener {
             plugin.msg().send(p, "customer.prices-changed");
             return;
         }
+
+        // Anti-abuse: trade-spam cooldown (checked last, so stale windows and refused clicks don't use it up).
+        if (!plugin.getAntiAbuse().allowPurchase(p, shop)) return;
 
         int times = e.isShiftClick() ? Math.max(1, plugin.getConfig().getInt("trading.shift-click-max", 64)) : 1;
         int done = 0;
@@ -217,6 +233,7 @@ public class CustomerTradeListener implements Listener {
             shop.setDirty(true);
             session.bought = true;
             plugin.getTransactions().recordSale(p, shop, trade, done, unit);
+            plugin.getAntiAbuse().onSale(p, shop, trade, done, unit);
             plugin.getRatings().recordPurchase(p, shop);
             merchant.setRecipes(sm.buildRecipes(shop)); // re-lock sold-out trades
             session.prices = sm.snapshotPrices(shop);
@@ -247,9 +264,9 @@ public class CustomerTradeListener implements Listener {
         int n = 0;
         Component limit = null;
         while (n < times) {
-            if (!stockSim.containsAtLeast(res, res.getAmount())) { limit = m.get("customer.error.out-of-stock"); break; }
-            if (!bagSim.addItem(res.clone()).isEmpty()) { limit = m.get("customer.error.inventory-full"); break; }
-            stockSim.removeItem(res.clone());
+            if (ItemMatch.count(stockSim, res) < res.getAmount()) { limit = m.get("customer.error.out-of-stock"); break; }
+            // simulate with the actual stock stacks, which is what the customer will receive
+            if (!addAll(bagSim, ItemMatch.take(stockSim, res, res.getAmount()))) { limit = m.get("customer.error.inventory-full"); break; }
             n++;
         }
 
@@ -279,8 +296,7 @@ public class CustomerTradeListener implements Listener {
 
         // 4) hand over the goods
         for (int i = 0; i < n; i++) {
-            st.removeItem(res.clone());
-            p.getInventory().addItem(res.clone());
+            give(p, ItemMatch.take(st, res, res.getAmount())); // the real stock stacks, NBT untouched
         }
         return n;
     }
@@ -295,17 +311,23 @@ public class CustomerTradeListener implements Listener {
 
         ItemStack res = t.getResult();
         Inventory st = shop.getStorage();
-        if (!st.containsAtLeast(res, res.getAmount())) return m.get("customer.error.out-of-stock");
+        if (ItemMatch.count(st, res) < res.getAmount()) return m.get("customer.error.out-of-stock");
 
-        ItemStack[] pays = t.getPay2() == null ? new ItemStack[]{t.getPay1()} : new ItemStack[]{t.getPay1(), t.getPay2()};
+        // The customer's ACTUAL payment items go into the shop's storage, not a copy of the listing template.
+        ItemStack pay1 = taken(mi, slots[0], t.getPay1());
+        ItemStack pay2 = t.getPay2() == null ? null : taken(mi, slots[1], t.getPay2());
+        ItemStack[] pays = pay2 == null ? new ItemStack[]{pay1} : new ItemStack[]{pay1, pay2};
         if (!InvUtil.canFit(st.getContents(), 54, res, pays)) return m.get("customer.error.storage-full");
-        if (!InvUtil.canFit(p.getInventory().getStorageContents(), 36, null, res)) return m.get("customer.error.inventory-full");
+        List<ItemStack> preview = ItemMatch.take(InvUtil.sim(st.getContents(), 54), res, res.getAmount());
+        if (!InvUtil.canFit(p.getInventory().getStorageContents(), 36, null, preview.toArray(new ItemStack[0]))) {
+            return m.get("customer.error.inventory-full");
+        }
 
-        st.removeItem(res.clone());
-        for (ItemStack pay : pays) st.addItem(pay.clone());
+        List<ItemStack> goods = ItemMatch.take(st, res, res.getAmount()); // the real stock stacks
+        for (ItemStack pay : pays) st.addItem(pay);
         consume(mi, slots[0], t.getPay1().getAmount());
         if (t.getPay2() != null) consume(mi, slots[1], t.getPay2().getAmount());
-        p.getInventory().addItem(res.clone());
+        give(p, goods);
         return null;
     }
 
@@ -319,7 +341,29 @@ public class CustomerTradeListener implements Listener {
     }
 
     private boolean satisfies(ItemStack have, ItemStack need) {
-        return have != null && have.isSimilar(need) && have.getAmount() >= need.getAmount();
+        return have != null && ItemMatch.same(have, need) && have.getAmount() >= need.getAmount();
+    }
+
+    /** The customer's real item from a trade slot, sized to what the trade takes. */
+    private static ItemStack taken(MerchantInventory mi, int slot, ItemStack need) {
+        ItemStack s = mi.getItem(slot).clone();
+        s.setAmount(need.getAmount());
+        return s;
+    }
+
+    /** True if every stack fits (simulation only). */
+    private static boolean addAll(Inventory inv, List<ItemStack> items) {
+        for (ItemStack it : items) if (!inv.addItem(it.clone()).isEmpty()) return false;
+        return true;
+    }
+
+    /** Hands stacks to the player; anything that does not fit is dropped at their feet rather than lost. */
+    private static void give(Player p, List<ItemStack> items) {
+        for (ItemStack it : items) {
+            for (ItemStack left : p.getInventory().addItem(it).values()) {
+                p.getWorld().dropItem(p.getLocation(), left);
+            }
+        }
     }
 
     private void consume(MerchantInventory mi, int slot, int amount) {

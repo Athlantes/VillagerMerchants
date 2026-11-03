@@ -132,6 +132,23 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
         if (t.isMoney() && row == 1) {
             // money trades have no second payment
         } else if (cursor != null && !cursor.getType().isAir()) {
+            var aa = plugin.getAntiAbuse();
+            if (aa.isBannedItem(cursor)) {
+                aa.logBlockedEdit(player, shop, cursor, idx, row);
+                plugin.msg().send(player, "anti-abuse.banned-item");
+                shop.pruneTrade(idx);
+                render();
+                return;
+            }
+            // Selling something new at an existing money price: the price must still fit the new item's cap.
+            if (row == 2 && t.isMoney() && t.getPrice() > aa.maxTotal(cursor) + 0.0001) {
+                aa.logBlockedPrice(player, shop, cursor, t.getPrice(), aa.maxTotal(cursor));
+                plugin.msg().send(player, "anti-abuse.price-too-high-editor", "price", plugin.getShopManager().money(t.getPrice()),
+                        "max", plugin.getShopManager().money(aa.maxTotal(cursor)));
+                shop.pruneTrade(idx);
+                render();
+                return;
+            }
             if (row != 2) t.setPrice(0); // setting a payment item switches the trade back to item pricing
             t.set(row, cursor.clone());
         } else if (row == 0 && moneyOn() && e.getClick() == ClickType.SHIFT_LEFT) {
@@ -146,10 +163,20 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
             t.setPrice(0);
         } else if (current != null) {
             int max = current.getMaxStackSize();
+            int before = current.getAmount();
             switch (e.getClick()) {
                 case RIGHT -> current.setAmount(current.getAmount() + 1 > max ? 1 : current.getAmount() + 1);
                 case SHIFT_RIGHT -> current.setAmount(current.getAmount() - 1 < 1 ? max : current.getAmount() - 1);
                 default -> t.set(row, null);
+            }
+            // Shrinking the stack being sold lowers its price cap (cap x amount): don't allow it to drop below the price.
+            if (row == 2 && t.getResult() != null && t.isMoney()) {
+                double cap = plugin.getAntiAbuse().maxTotal(t.getResult());
+                if (t.getPrice() > cap + 0.0001) {
+                    t.getResult().setAmount(before);
+                    plugin.msg().send(player, "anti-abuse.price-too-high-editor", "price", plugin.getShopManager().money(t.getPrice()),
+                            "max", plugin.getShopManager().money(cap));
+                }
             }
         }
         shop.pruneTrade(idx);

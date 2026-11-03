@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.persistence.PersistentDataType;
@@ -43,11 +44,18 @@ public class ShopInteractListener implements Listener {
             return;
         }
 
+        if (shop != null) {
+            var use = plugin.getProtection().checkUse(player, villager.getLocation());
+            if (!use.allowed()) { use.send(plugin.msg(), player); return; }
+        }
+
         if (shop == null) {
             if (!plugin.access().canRent(player)) {
                 plugin.msg().send(player, "shop.rent.no-rent-permission");
                 return;
             }
+            var verdict = plugin.getProtection().checkRent(player, villager.getLocation());
+            if (!verdict.allowed()) { verdict.send(plugin.msg(), player); return; }
             new RentGui(plugin, player, villager.getUniqueId()).open();
         } else if (shop.isMember(player.getUniqueId()) && !player.isSneaking()) {
             new OwnerMenuGui(plugin, player, shop).open();   // owner or staff; sneak = preview as a customer
@@ -56,6 +64,12 @@ public class ShopInteractListener implements Listener {
         } else {
             plugin.getCustomerTrades().open(player, shop);
         }
+    }
+
+    /** Shops in worlds that load after this plugin (Multiverse etc.) get their NPC once the world is there. */
+    @EventHandler
+    public void onWorldLoad(WorldLoadEvent e) {
+        plugin.getShopManager().onWorldLoad(e.getWorld());
     }
 
     /** Keep name tags in sync after chunk loads (e.g. rent expired while unloaded). */

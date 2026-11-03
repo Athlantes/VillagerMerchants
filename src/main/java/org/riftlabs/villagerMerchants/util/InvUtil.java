@@ -21,7 +21,7 @@ public final class InvUtil {
     /** Simulates removing 'remove' then adding all 'add' items to a copy of the contents. */
     public static boolean canFit(ItemStack[] contents, int size, ItemStack remove, ItemStack... add) {
         Inventory tmp = sim(contents, size);
-        if (remove != null) tmp.removeItem(remove.clone());
+        if (remove != null) ItemMatch.take(tmp, remove, remove.getAmount());
         for (ItemStack a : add) {
             if (a != null && !tmp.addItem(a.clone()).isEmpty()) return false;
         }

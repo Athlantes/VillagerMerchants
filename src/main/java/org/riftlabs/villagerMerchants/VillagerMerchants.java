@@ -14,16 +14,19 @@ import org.riftlabs.villagerMerchants.listeners.NpcLookTask;
 import org.riftlabs.villagerMerchants.listeners.PricePromptListener;
 import org.riftlabs.villagerMerchants.listeners.ShopInteractListener;
 import org.riftlabs.villagerMerchants.manager.Access;
+import org.riftlabs.villagerMerchants.manager.AntiAbuse;
 import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.EffectManager;
 import org.riftlabs.villagerMerchants.manager.NametagManager;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
+import org.riftlabs.villagerMerchants.manager.ProtectionManager;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.manager.TeleportManager;
 import org.riftlabs.villagerMerchants.manager.TransactionManager;
 import org.riftlabs.villagerMerchants.util.CurrencyToken;
+import org.riftlabs.villagerMerchants.util.CustomItems;
 import org.riftlabs.villagerMerchants.util.Messages;
 
 public final class VillagerMerchants extends JavaPlugin {
@@ -45,6 +48,15 @@ public final class VillagerMerchants extends JavaPlugin {
     private Economy econ;
     private Messages messages;
     private Access access;
+    private AntiAbuse antiAbuse;
+    private ProtectionManager protection;
+
+    @Override
+    public void onLoad() {
+        // WorldGuard only accepts new flags while plugins load, so the vm-shops flag has to be registered here
+        saveDefaultConfig();
+        ProtectionManager.registerFlags(this);
+    }
 
     @Override
     public void onEnable() {
@@ -60,8 +72,11 @@ public final class VillagerMerchants extends JavaPlugin {
         }
 
         CurrencyToken.init(this);
+        CustomItems.init(this);
 
         if (!getDataFolder().exists()) getDataFolder().mkdirs();
+        antiAbuse = new AntiAbuse(this); // blacklist, price caps, purchase cooldown, suspicious log
+        protection = new ProtectionManager(this); // WorldGuard regions/flags, GriefPrevention, Lands
 
         databaseManager = new DatabaseManager(this);
         categories = new CategoryRegistry(this);
@@ -110,6 +125,7 @@ public final class VillagerMerchants extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (antiAbuse != null) antiAbuse.close();
         if (nametagManager != null) nametagManager.cleanup();
         if (effectManager != null) effectManager.cleanup();
         if (shopManager != null) {
@@ -130,6 +146,9 @@ public final class VillagerMerchants extends JavaPlugin {
     /** Reloads config.yml, the language file, effects.yml and categories.yml. */
     public void reloadAll() {
         reloadConfig();
+        CustomItems.init(this);
+        antiAbuse.reload();
+        protection.reload();
         messages.load();
         effectManager.reload();
         categories.load();
@@ -152,6 +171,8 @@ public final class VillagerMerchants extends JavaPlugin {
     public Messages msg() { return messages; }
     public Messages getMessages() { return messages; }
     public Access access() { return access; }
+    public AntiAbuse getAntiAbuse() { return antiAbuse; }
+    public ProtectionManager getProtection() { return protection; }
     public Economy getEconomy() { return econ; }
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public ShopManager getShopManager() { return shopManager; }
