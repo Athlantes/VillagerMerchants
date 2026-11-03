@@ -96,6 +96,7 @@ shop:
   rent:
     taken: "<prefix><red>This shop was just rented by someone else."
     max-shops: "<prefix><red>You have reached the maximum number of shops (<max>)."
+    no-rent-permission: "<prefix><red>You don't have permission to rent shops."
     success: "<prefix><green>Shop rented for <days> days! Right-click it to manage it."
     no-permission: "<prefix><red>You can't pay rent for this shop."
     too-far: "<prefix><red>You can't rent further ahead. Upgrade your max rent duration!"
@@ -123,6 +124,7 @@ upgrade:
   title: "<dark_gray>Upgrades"
   maxed: "<prefix><red>That upgrade is already maxed."
   purchased: "<prefix><green>Upgrade purchased!"
+  no-permission: "<prefix><red>You don't have access to that upgrade."
   types:
     slots:
       name: "Trade Slots"
@@ -137,6 +139,10 @@ upgrade:
       current: "<days> days"
       gain: "+<days> days"
   item:
+    locked:
+      name: "<red><name> <gray>(locked)"
+      lore:
+        - "<gray>Not available for your rank."
     maxed:
       name: "<gold><name> <green>(MAX)"
       lore:
@@ -590,6 +596,12 @@ custom-gui:
     name: "<yellow>Click again to confirm"
     lore:
       - "<gray><skin> for <white><price>"
+  skin-no-access:
+    name: "<red><skin> <gray>(locked)"
+    lore:
+      - "<gray>Not available for your rank."
+  skin-no-access-msg: "<prefix><red>You don't have access to the <skin> skin."
+  nametag-no-access: "<prefix><red>You don't have access to the <name><red> nametag."
   skin-locked:
     name: "<red><skin> <gray>(locked)"
     lore:

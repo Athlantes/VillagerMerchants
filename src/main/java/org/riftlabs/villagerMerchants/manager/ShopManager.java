@@ -331,8 +331,13 @@ public class ShopManager {
             plugin.msg().send(p, "shop.rent.taken");
             return false;
         }
-        if (countOwned(p.getUniqueId()) >= cfg().getInt("rent.max-shops-per-player", 3)) {
-            plugin.msg().send(p, "shop.rent.max-shops", "max", cfg().getInt("rent.max-shops-per-player", 3));
+        if (!plugin.access().canRent(p)) {
+            plugin.msg().send(p, "shop.rent.no-rent-permission");
+            return false;
+        }
+        int limit = plugin.access().maxShops(p);   // rank-based: villagermerchants.maxshops.<n>
+        if (countOwned(p.getUniqueId()) >= limit) {
+            plugin.msg().send(p, "shop.rent.max-shops", "max", Access.cap(limit));
             return false;
         }
         PlayerProfile prof = getProfile(p.getUniqueId());
@@ -479,6 +484,10 @@ public class ShopManager {
     }
 
     public boolean purchaseUpgrade(Player pl, UpgradeType t) {
+        if (!plugin.access().canUpgrade(pl, t)) {
+            plugin.msg().send(pl, "upgrade.no-permission");
+            return false;
+        }
         PlayerProfile p = getProfile(pl.getUniqueId());
         if (level(t, p) >= maxLevel(t)) {
             plugin.msg().send(pl, "upgrade.maxed");
@@ -527,6 +536,10 @@ public class ShopManager {
     public void equipSkin(Player pl, Skins.Skin s) {
         PlayerProfile p = getProfile(pl.getUniqueId());
         if (!owns(p, s)) return;
+        if (!plugin.access().canUseSkin(pl, s)) {
+            plugin.msg().send(pl, "custom-gui.skin-no-access-msg", "skin", s.name());
+            return;
+        }
         if (s.kind() == Skins.Kind.TYPE) p.setSkinType(s.key()); else p.setSkinProfession(s.key());
         saveProfile(p);
         for (Shop sh : shops.values()) if (sh.isOwner(pl.getUniqueId())) refreshNameTag(sh.getId());
@@ -535,6 +548,10 @@ public class ShopManager {
     public boolean buySkin(Player pl, Skins.Skin s) {
         PlayerProfile p = getProfile(pl.getUniqueId());
         if (owns(p, s)) return false;
+        if (!plugin.access().canUseSkin(pl, s)) {   // check before charging anything
+            plugin.msg().send(pl, "custom-gui.skin-no-access-msg", "skin", s.name());
+            return false;
+        }
         if (!charge(pl, skinPrice(s))) return false;
         p.unlockSkin(s.id());
         plugin.msg().send(pl, "skins.unlocked", "skin", s.name());

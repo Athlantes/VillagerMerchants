@@ -302,9 +302,9 @@ public class ShopDirectoryGui implements GuiHolder {
 
         lore.add(Component.empty());
         var tp = plugin.getTeleports();
-        if (tp.enabled() && player.hasPermission("villagermerchants.shops.teleport")) {
+        if (tp.enabled() && plugin.access().canTeleport(player)) {
             lore.add(m.line("directory.entry.click-teleport"));
-            if (tp.cost() > 0 && !player.hasPermission("villagermerchants.shops.bypass")) {
+            if (tp.cost() > 0 && !plugin.access().bypassCost(player)) {
                 lore.add(m.line("directory.entry.teleport-cost", "cost", sm.money(tp.cost())));
             }
         } else {

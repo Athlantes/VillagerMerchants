@@ -54,7 +54,7 @@ public class TeleportManager {
         ShopManager sm = plugin.getShopManager();
         var m = plugin.msg();
         if (!enabled()) { m.send(p, "teleport.disabled"); return; }
-        if (!p.hasPermission("villagermerchants.shops.teleport")) {
+        if (!plugin.access().canTeleport(p)) {
             m.send(p, "teleport.no-permission");
             return;
         }
@@ -68,13 +68,20 @@ public class TeleportManager {
             return;
         }
 
-        boolean bypass = p.hasPermission("villagermerchants.shops.bypass");
-        if (!bypass) {
+        // Each perk has its own node (villagermerchants.shops.bypass.cooldown / .warmup / .cost);
+        // villagermerchants.shops.bypass still grants all three.
+        var acc = plugin.access();
+        final boolean skipCooldown = acc.bypassCooldown(p);
+        final boolean skipWarmup = acc.bypassWarmup(p);
+        final boolean skipCost = acc.bypassCost(p);
+        if (!skipCooldown) {
             long left = cooldownUntil.getOrDefault(p.getUniqueId(), 0L) - System.currentTimeMillis();
             if (left > 0) {
                 m.send(p, "teleport.cooldown", "seconds", Math.max(1, (left + 999) / 1000));
                 return;
             }
+        }
+        if (!skipCost) {
             double cost = cost();
             if (cost > 0 && !plugin.getEconomy().has(p, cost)) {
                 m.send(p, "teleport.need-money", "amount", sm.money(cost));
@@ -83,8 +90,8 @@ public class TeleportManager {
         }
 
         cancelPending(p.getUniqueId());
-        int warmup = bypass ? 0 : Math.max(0, cfg().getInt("directory.teleport.warmup-seconds", 3));
-        if (warmup <= 0) { go(p, shop, target, bypass); return; }
+        int warmup = skipWarmup ? 0 : Math.max(0, cfg().getInt("directory.teleport.warmup-seconds", 3));
+        if (warmup <= 0) { go(p, shop, target, skipCooldown, skipCost); return; }
 
         final Location start = p.getLocation();
         final int[] waited = {0};
@@ -102,7 +109,7 @@ public class TeleportManager {
                 waited[0] += 5;
                 if (waited[0] >= warmup * 20) {
                     cancelPending(p.getUniqueId());
-                    go(p, shop, target, bypass);
+                    go(p, shop, target, skipCooldown, skipCost);
                 }
             }
         }, 5L, 5L);
@@ -115,9 +122,9 @@ public class TeleportManager {
     }
 
     /** Loads the destination chunk, then (back on the main thread) validates, charges and teleports. */
-    private void go(Player p, Shop shop, Location target, boolean bypass) {
+    private void go(Player p, Shop shop, Location target, boolean skipCooldown, boolean skipCost) {
         target.getWorld().getChunkAtAsync(target).thenAccept(chunk ->
-                Bukkit.getScheduler().runTask(plugin, () -> finish(p, shop, target, bypass))
+                Bukkit.getScheduler().runTask(plugin, () -> finish(p, shop, target, skipCooldown, skipCost))
         ).exceptionally(ex -> {
             Bukkit.getScheduler().runTask(plugin, () ->
                     plugin.msg().send(p, "teleport.load-failed"));
@@ -125,8 +132,12 @@ public class TeleportManager {
         });
     }
 
-    private void finish(Player p, Shop shop, Location target, boolean bypass) {
+    private void finish(Player p, Shop shop, Location target, boolean skipCooldown, boolean skipCost) {
         if (!p.isOnline()) return;
+        if (!plugin.access().canTeleport(p)) {   // lost the permission during the warm-up
+            plugin.msg().send(p, "teleport.no-permission");
+            return;
+        }
         ShopManager sm = plugin.getShopManager();
         if (!sm.isLive(shop) || !shop.isActive(System.currentTimeMillis())) {
             plugin.msg().send(p, "teleport.closed-while-waiting");
@@ -138,7 +149,7 @@ public class TeleportManager {
             return;
         }
 
-        final double cost = bypass ? 0 : cost();
+        final double cost = skipCost ? 0 : cost();
         if (cost > 0) {
             Economy econ = plugin.getEconomy();
             if (!econ.has(p, cost) || !econ.withdrawPlayer(p, cost).transactionSuccess()) {
@@ -146,7 +157,7 @@ public class TeleportManager {
                 return;
             }
         }
-        if (!bypass) {
+        if (!skipCooldown) {
             long cd = Math.max(0, cfg().getLong("directory.teleport.cooldown-seconds", 60)) * 1000L;
             cooldownUntil.put(p.getUniqueId(), System.currentTimeMillis() + cd);
         }

@@ -88,6 +88,7 @@ public class RatingManager {
     /** After a customer bought something: offer clickable stars (once in a while, and only if they haven't rated). */
     public void maybePrompt(Player p, Shop shop) {
         if (!enabled() || !cfg().getBoolean("ratings.prompt-after-purchase", true)) return;
+        if (!plugin.access().canRate(p)) return;   // don't prompt people who couldn't rate anyway
         if (shop.isMember(p.getUniqueId())) return;
 
         String pk = p.getUniqueId() + "|" + shop.getId();
@@ -119,6 +120,7 @@ public class RatingManager {
 
     public void rate(Player p, UUID shopId, int stars) {
         if (!enabled()) { plugin.msg().send(p, "ratings.disabled"); return; }
+        if (!plugin.access().canRate(p)) { plugin.msg().send(p, "misc.no-permission"); return; }
         if (stars < 1 || stars > 5) { plugin.msg().send(p, "ratings.pick-stars"); return; }
         Shop shop = plugin.getShopManager().getShop(shopId);
         if (shop == null || !shop.isActive(System.currentTimeMillis())) {

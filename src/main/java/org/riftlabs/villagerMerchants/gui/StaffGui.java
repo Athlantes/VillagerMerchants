@@ -12,6 +12,7 @@ import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
+import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.StaffRole;
@@ -66,11 +67,11 @@ public class StaffGui implements GuiHolder, ShopBound {
         inv.setItem(BACK, Gui.back(plugin));
         inv.setItem(47, m.icon(plugin.material("staff-roles", Material.PAPER), "staff-gui.roles",
                 "stocker", StaffRole.STOCKER.label(), "manager", StaffRole.MANAGER.label(), "co_owner", StaffRole.CO_OWNER.label()));
-        int max = plugin.getStaff().maxStaff();
+        int max = plugin.getStaff().maxStaff(player);   // owner-only menu, so the viewer is the owner
         boolean full = shop.getStaff().size() >= max;
         inv.setItem(ADD, full
-                ? m.icon(plugin.material("staff-full", Material.GRAY_DYE), "staff-gui.full", "max", max)
-                : m.icon(plugin.material("staff-add", Material.EMERALD), "staff-gui.add", "count", shop.getStaff().size(), "max", max));
+                ? m.icon(plugin.material("staff-full", Material.GRAY_DYE), "staff-gui.full", "max", Access.cap(max))
+                : m.icon(plugin.material("staff-add", Material.EMERALD), "staff-gui.add", "count", shop.getStaff().size(), "max", Access.cap(max)));
     }
 
     public void open() { player.openInventory(inv); }
@@ -85,7 +86,7 @@ public class StaffGui implements GuiHolder, ShopBound {
 
         if (slot == BACK) { later(() -> new OwnerMenuGui(plugin, player, shop).open()); return; }
         if (slot == ADD) {
-            if (shop.getStaff().size() >= sm.maxStaff()) return;
+            if (shop.getStaff().size() >= sm.maxStaff(player)) return;
             later(() -> {
                 player.closeInventory();
                 plugin.getChatPrompts().begin(player,

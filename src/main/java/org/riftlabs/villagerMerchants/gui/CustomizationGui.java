@@ -28,7 +28,7 @@ import java.util.Map;
 
 public class CustomizationGui implements GuiHolder, ShopBound {
     private enum Tab { SKINS, NAMETAGS, EFFECTS }
-    private record NametagPreset(String id, String format, String name, double price) {}
+    private record NametagPreset(String id, String format, String name, double price, String permission) {}
 
     // Fixed layout slots for Skins tab
     private static final int[] TYPE_SLOTS = {10, 11, 12, 13, 14, 15, 16};
@@ -65,10 +65,14 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         this.player = player;
         this.shop = shop;
 
-        this.skinsEnabled = plugin.getConfig().getBoolean("customization.skins-enabled", true);
-        this.tagsEnabled = plugin.getConfig().getBoolean("customization.nametags-enabled", true);
+        var access = plugin.access();
+        this.skinsEnabled = plugin.getConfig().getBoolean("customization.skins-enabled", true)
+                && access.canCustomize(player, "skins");
+        this.tagsEnabled = plugin.getConfig().getBoolean("customization.nametags-enabled", true)
+                && access.canCustomize(player, "nametags");
 
-        this.effectsEnabled = plugin.getConfig().getBoolean("customization.effects-enabled", true);
+        this.effectsEnabled = plugin.getConfig().getBoolean("customization.effects-enabled", true)
+                && access.canCustomize(player, "effects");
 
         if (!skinsEnabled) this.currentTab = tagsEnabled ? Tab.NAMETAGS : (effectsEnabled ? Tab.EFFECTS : Tab.SKINS);
 
@@ -100,7 +104,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             String name = cfg.getString(key + ".name", plugin.msg().raw("misc.unknown"));
             String format = cfg.getString(key + ".format", plugin.msg().raw("nametag.fallback-format"));
             double price = cfg.getDouble(key + ".price", 0.0);
-            allNametags.add(new NametagPreset(key, format, name, price));
+            String permission = cfg.getString(key + ".permission", "");
+            allNametags.add(new NametagPreset(key, format, name, price, permission));
         }
     }
 
@@ -159,6 +164,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                 if (p.getEquippedNametagFormat().equals(data.format())) {
                     lore.add(m.line("custom-gui.status.equipped"));
                     it = Text.glow(it);
+                } else if (!plugin.access().canUseNametag(player, data.id(), data.permission())) {
+                    lore.add(m.line("custom-gui.status.locked"));
                 } else if (p.ownsNametag(data.id())) {
                     lore.add(m.line("custom-gui.status.click-equip"));
                 } else if (data.id().equals(confirming)) {
@@ -211,7 +218,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             lore.add(Component.empty());
 
             boolean owned = def.price() <= 0 || p.ownsEffect(def.id());
-            if (!def.permission().isEmpty() && !player.hasPermission(def.permission())) {
+            if (!plugin.access().canUseEffect(player, def)) {
                 lore.add(m.line("custom-gui.status.locked"));
             } else if (def.id().equals(p.getEquippedEffect())) {
                 lore.add(m.line("custom-gui.status.equipped"));
@@ -268,7 +275,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             return;
         }
 
-        if (!def.permission().isEmpty() && !player.hasPermission(def.permission())) {
+        if (!plugin.access().canUseEffect(player, def)) {
             plugin.msg().send(player, "custom-gui.effect-no-access");
             return;
         }
@@ -297,6 +304,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         var m = plugin.msg();
         if (sm.isEquipped(p, s)) {
             return Text.glow(m.icon(s.icon(), "custom-gui.skin-equipped", "skin", s.name()));
+        } else if (!plugin.access().canUseSkin(player, s)) {
+            return m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", s.name());
         } else if (sm.owns(p, s)) {
             return m.icon(s.icon(), "custom-gui.skin-owned", "skin", s.name());
         } else if (s.id().equals(confirming)) {
@@ -352,6 +361,9 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
                 if (p.getEquippedNametagFormat().equals(data.format())) {
                     return;
+                } else if (!plugin.access().canUseNametag(player, data.id(), data.permission())) {
+                    plugin.msg().send(player, "custom-gui.nametag-no-access", "name", Messages.parsed(data.name()));
+                    return;
                 } else if (p.ownsNametag(data.id())) {
                     p.setEquippedNametagFormat(data.format());
                     plugin.getNametagManager().updateShopNametag(shop.getId(), data.format());
@@ -387,6 +399,10 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             ShopManager sm = plugin.getShopManager();
             PlayerProfile p = sm.getProfile(player.getUniqueId());
 
+            if (!sm.isEquipped(p, clickedSkin) && !plugin.access().canUseSkin(player, clickedSkin)) {
+                plugin.msg().send(player, "custom-gui.skin-no-access-msg", "skin", clickedSkin.name());
+                return;
+            }
             if (sm.owns(p, clickedSkin)) {
                 sm.equipSkin(player, clickedSkin);
                 confirming = null;

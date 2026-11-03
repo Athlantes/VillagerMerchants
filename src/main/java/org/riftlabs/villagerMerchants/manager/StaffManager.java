@@ -22,7 +22,10 @@ public class StaffManager {
 
     public StaffManager(VillagerMerchants plugin) { this.plugin = plugin; }
 
+    /** The config floor ({@code staff.max-per-shop}). */
     public int maxStaff() { return Math.max(0, plugin.getConfig().getInt("staff.max-per-shop", 5)); }
+    /** What this owner may hire: the floor, or more with villagermerchants.maxstaff.<n>. */
+    public int maxStaff(Player owner) { return plugin.access().maxStaff(owner); }
     public boolean enabled() { return plugin.getConfig().getBoolean("staff.enabled", true); }
 
     /** Finds an online player or one the server has seen before; null if unknown. */
@@ -38,11 +41,12 @@ public class StaffManager {
         var m = plugin.msg();
         if (!enabled()) return m.get("staff.error.disabled");
         if (!shop.isOwner(actor.getUniqueId())) return m.get("staff.error.owner-only");
-        if (!actor.hasPermission("villagermerchants.staff")) return m.get("staff.error.no-permission");
+        if (!plugin.access().canManageStaff(actor)) return m.get("staff.error.no-permission");
         UUID id = target.getUniqueId();
         if (shop.isOwner(id)) return m.get("staff.error.self");
         if (shop.getStaff().containsKey(id)) return m.get("staff.error.already-staff", "player", nameOf(target));
-        if (shop.getStaff().size() >= maxStaff()) return m.get("staff.error.full", "max", maxStaff());
+        int cap = maxStaff(actor);
+        if (shop.getStaff().size() >= cap) return m.get("staff.error.full", "max", Access.cap(cap));
 
         shop.setStaff(id, role);
         plugin.getShopManager().saveShop(shop);

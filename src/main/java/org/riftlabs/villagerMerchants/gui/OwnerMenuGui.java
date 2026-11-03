@@ -10,6 +10,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
+import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
 import org.riftlabs.villagerMerchants.manager.ShopManager;
@@ -55,6 +56,16 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
 
     private boolean can(Perm p) { return shop.can(player.getUniqueId(), p); }
 
+    // Role says what a member MAY do in this shop; these add the server's permission nodes on top.
+    private boolean showSales()     { return can(Perm.SALES) && plugin.access().canRunSales(player); }
+    private boolean showFeatured()  { return can(Perm.BILLING) && plugin.access().canPromote(player); }
+    private boolean showUpgrades()  { return owner && plugin.access().canUpgradeAny(player); }
+    private boolean showStaff()     { return owner && plugin.access().canManageStaff(player); }
+    private boolean showCustomize() { return owner && plugin.access().canCustomizeAny(player); }
+    private String staffMax() {
+        return Access.cap(owner ? plugin.getStaff().maxStaff(player) : plugin.getStaff().maxStaff());
+    }
+
     /** Sales numbers come from the database thread; the item is refreshed once they arrive. */
     private void loadStats() {
         plugin.getTransactions().loadStats(shop, st -> {
@@ -81,7 +92,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
         long now = System.currentTimeMillis();
         long left = shop.getRentExpiry() - now;
         int complete = shop.completeTrades().size();
-        String staffCount = shop.getStaff().size() + "/" + plugin.getStaff().maxStaff();
+        String staffCount = shop.getStaff().size() + "/" + staffMax();
 
         // ---- who's looking
         StaffRole role = shop.roleOf(player.getUniqueId());
@@ -102,7 +113,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
         if (can(Perm.STORAGE)) {
             inv.setItem(STORAGE, m.icon(plugin.material("owner-storage", Material.CHEST), "owner-menu.storage"));
         }
-        if (owner) {
+        if (showUpgrades()) {
             inv.setItem(UPGRADES, m.icon(plugin.material("owner-upgrades", Material.NETHER_STAR), "owner-menu.upgrades"));
         }
         if (can(Perm.BILLING)) {
@@ -119,7 +130,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
         }
 
         // ---- row 2
-        if (can(Perm.SALES)) {
+        if (showSales()) {
             Material carrot = plugin.material("owner-sale", Material.GOLDEN_CARROT);
             if (shop.isOnSale(now)) {
                 inv.setItem(SALE, Text.glow(m.icon(carrot, "owner-menu.sale-running",
@@ -129,7 +140,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
                 inv.setItem(SALE, m.icon(carrot, "owner-menu.sale"));
             }
         }
-        if (can(Perm.BILLING)) {
+        if (showFeatured()) {
             Material star = plugin.material("owner-featured", Material.NETHER_STAR);
             if (shop.isFeatured(now)) {
                 inv.setItem(FEATURED, Text.glow(m.icon(star, "owner-menu.featured-active",
@@ -139,9 +150,11 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
                         "used", promo.featuredInUse(), "max", promo.maxFeaturedSlots()));
             }
         }
-        if (owner) {
+        if (showStaff()) {
             inv.setItem(STAFF, m.icon(plugin.material("owner-staff", Material.PLAYER_HEAD), "owner-menu.staff",
-                    "count", shop.getStaff().size(), "max", plugin.getStaff().maxStaff()));
+                    "count", shop.getStaff().size(), "max", staffMax()));
+        }
+        if (showCustomize()) {
             String none = m.raw("misc.none");
             String biome = prof.getSkinType() != null ? skinName(Skins.Kind.TYPE, prof.getSkinType()) : none;
             String outfit = prof.getSkinProfession() != null ? skinName(Skins.Kind.PROFESSION, prof.getSkinProfession()) : none;
@@ -186,11 +199,11 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
         switch (slot) {
             case TRADES -> { if (can(Perm.TRADES)) later(() -> new TradeEditorGui(plugin, player, shop).open()); }
             case STORAGE -> { if (can(Perm.STORAGE)) later(() -> player.openInventory(shop.getStorage())); }
-            case UPGRADES -> { if (owner) later(() -> new UpgradeGui(plugin, player, shop).open()); }
-            case CUSTOM -> { if (owner) later(() -> new CustomizationGui(plugin, player, shop).open()); }
-            case SALE -> { if (can(Perm.SALES)) later(() -> new SaleGui(plugin, player, shop).open()); }
-            case FEATURED -> { if (can(Perm.BILLING)) later(() -> new FeaturedGui(plugin, player, shop).open()); }
-            case STAFF -> { if (owner) later(() -> new StaffGui(plugin, player, shop).open()); }
+            case UPGRADES -> { if (showUpgrades()) later(() -> new UpgradeGui(plugin, player, shop).open()); }
+            case CUSTOM -> { if (showCustomize()) later(() -> new CustomizationGui(plugin, player, shop).open()); }
+            case SALE -> { if (showSales()) later(() -> new SaleGui(plugin, player, shop).open()); }
+            case FEATURED -> { if (showFeatured()) later(() -> new FeaturedGui(plugin, player, shop).open()); }
+            case STAFF -> { if (showStaff()) later(() -> new StaffGui(plugin, player, shop).open()); }
             case STATS -> {
                 if (owner) later(() -> {
                     player.closeInventory();

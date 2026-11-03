@@ -65,7 +65,9 @@ public class UpgradeGui implements GuiHolder, ShopBound {
             };
             String cost = sm.money(sm.upgradeCost(t, p));
             ItemStack it;
-            if (maxed) {
+            if (!plugin.access().canUpgrade(player, t)) {
+                it = m.icon(Material.BARRIER, "upgrade.item.locked", "name", name);
+            } else if (maxed) {
                 it = m.icon(mat, "upgrade.item.maxed", "name", name, "current", now);
             } else if (confirming == t) {
                 it = Text.glow(m.icon(mat, "upgrade.item.confirm", "gain", gain, "cost", cost));
@@ -91,6 +93,10 @@ public class UpgradeGui implements GuiHolder, ShopBound {
         }
         UpgradeType t = typeAt(slot);
         if (t == null) return;
+        if (!plugin.access().canUpgrade(player, t)) {
+            plugin.msg().send(player, "upgrade.no-permission");
+            return;
+        }
         if (confirming != t) {
             confirming = t;
         } else {

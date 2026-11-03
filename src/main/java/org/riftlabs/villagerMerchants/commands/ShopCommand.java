@@ -17,6 +17,7 @@ import org.bukkit.util.Vector;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.TxMode;
 import org.riftlabs.villagerMerchants.gui.ShopDirectoryGui;
+import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.StaffManager;
@@ -46,7 +47,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 0) {
             plugin.msg().sendLines(sender, "cmd.help");
-            if (sender.hasPermission("villagermerchants.admin")) plugin.msg().sendLines(sender, "cmd.help-admin");
+            if (plugin.access().anyAdmin(sender)) plugin.msg().sendLines(sender, "cmd.help-admin");
             return true;
         }
         String sub = args[0].toLowerCase();
@@ -57,7 +58,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             case "staff" -> { staffCommand(sender, args); return true; }
             case "sales", "purchases" -> {
                 if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
-                if (!p.hasPermission("villagermerchants.use")) { plugin.msg().send(p, "misc.no-permission"); return true; }
+                if (!plugin.access().canUse(p) || !plugin.access().canViewHistory(p)) { plugin.msg().send(p, "misc.no-permission"); return true; }
                 TxMode mode = sub.equals("sales") ? TxMode.SALES : TxMode.PURCHASES;
                 plugin.getTransactions().showHistory(p, mode, p.getUniqueId(), p.getName(), pageArg(args, 1));
                 return true;
@@ -72,11 +73,13 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
 
         if (sub.equals("claim")) {
             if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
+            if (!plugin.access().canClaim(p)) { plugin.msg().send(p, "misc.no-permission"); return true; }
             plugin.getShopManager().claimItems(p);
             return true;
         }
 
-        if (!sender.hasPermission("villagermerchants.admin")) {
+        // villagermerchants.admin = every admin action; villagermerchants.admin.<create|remove|reload|effect|log> = just that one
+        if (!plugin.access().admin(sender, sub)) {
             plugin.msg().send(sender, "misc.no-permission");
             return true;
         }
@@ -174,7 +177,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
 
     private void shopsCommand(CommandSender sender, String[] args) {
         if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return; }
-        if (!p.hasPermission("villagermerchants.shops")) { plugin.msg().send(p, "misc.no-permission"); return; }
+        if (!plugin.access().canBrowse(p)) { plugin.msg().send(p, "misc.no-permission"); return; }
         CategoryRegistry cats = plugin.getCategories();
         String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
@@ -360,11 +363,11 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             return out;
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("rate")) return new ArrayList<>(List.of("1", "2", "3", "4", "5"));
-        if (args.length == 2 && args[0].equalsIgnoreCase("log") && sender.hasPermission("villagermerchants.admin")) {
+        if (args.length == 2 && args[0].equalsIgnoreCase("log") && plugin.access().admin(sender, "log")) {
             for (Player pl : Bukkit.getOnlinePlayers()) if (pl.getName().toLowerCase().startsWith(args[1].toLowerCase())) out.add(pl.getName());
             return out;
         }
-        if (sender.hasPermission("villagermerchants.admin") && args.length >= 2 && args[0].equalsIgnoreCase("effect")) {
+        if (plugin.access().admin(sender, "effect") && args.length >= 2 && args[0].equalsIgnoreCase("effect")) {
             if (args.length == 2) {
                 for (String o : List.of("list", "test", "off")) if (o.startsWith(args[1].toLowerCase())) out.add(o);
             } else if (args.length == 3 && args[1].equalsIgnoreCase("test")) {
@@ -375,7 +378,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length != 1) return out;
         List<String> opts = new ArrayList<>(List.of("claim", "shops", "sales", "purchases", "rate", "sale", "staff"));
-        if (sender.hasPermission("villagermerchants.admin")) opts.addAll(List.of("create", "remove", "reload", "effect", "log"));
+        for (String a : Access.ADMIN_ACTIONS) if (plugin.access().admin(sender, a)) opts.add(a);
         for (String o : opts) if (o.startsWith(args[0].toLowerCase())) out.add(o);
         return out;
     }

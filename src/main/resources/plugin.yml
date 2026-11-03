@@ -16,11 +16,63 @@ commands:
     usage: /shops [search <item> | category <name> | sale]
 
 permissions:
-  villagermerchants.admin:
-    description: Create/remove shop NPCs, reload config
+  # ── Umbrella: everything, including every skin / nametag / effect and unlimited shops ──
+  villagermerchants.*:
+    description: Every VillagerMerchants permission
     default: op
+    children:
+      villagermerchants.admin: true
+      villagermerchants.use: true
+      villagermerchants.rent: true
+      villagermerchants.shops: true
+      villagermerchants.shops.teleport: true
+      villagermerchants.shops.bypass: true
+      villagermerchants.sales: true
+      villagermerchants.promote: true
+      villagermerchants.staff: true
+      villagermerchants.rate: true
+      villagermerchants.history: true
+      villagermerchants.claim: true
+      villagermerchants.upgrades.*: true
+      villagermerchants.customize.*: true
+      villagermerchants.skin.*: true
+      villagermerchants.nametag.*: true
+      villagermerchants.effect.*: true
+      villagermerchants.maxshops.unlimited: true
+      villagermerchants.maxstaff.unlimited: true
+
+  # ── Admin ──
+  villagermerchants.admin:
+    description: All admin commands (create / remove / reload / effect / log)
+    default: op
+    children:
+      villagermerchants.admin.create: true
+      villagermerchants.admin.remove: true
+      villagermerchants.admin.reload: true
+      villagermerchants.admin.effect: true
+      villagermerchants.admin.log: true
+  villagermerchants.admin.create:
+    description: /vm create - place a shop NPC
+    default: op
+  villagermerchants.admin.remove:
+    description: /vm remove - delete a shop NPC
+    default: op
+  villagermerchants.admin.reload:
+    description: /vm reload
+    default: op
+  villagermerchants.admin.effect:
+    description: /vm effect - list and test particle effects
+    default: op
+  villagermerchants.admin.log:
+    description: /vm log <player> - read anybody's transaction log
+    default: op
+
+  # ── Core features. These default to everyone, or to ops only with "permissions.strict: true" in config.yml ──
   villagermerchants.use:
-    description: Rent and use shops
+    description: Interact with shop NPCs (browse, buy, manage your own shops)
+    default: true
+  villagermerchants.rent:
+    description: Rent a new shop
     default: true
   villagermerchants.shops:
     description: Open the /shops directory
@@ -28,9 +80,6 @@ permissions:
   villagermerchants.shops.teleport:
     description: Teleport to shops from the directory
     default: true
-  villagermerchants.shops.bypass:
-    description: No cooldown, warm-up or cost when teleporting to shops
-    default: op
   villagermerchants.sales:
     description: Run timed sales on shops
     default: true
@@ -40,3 +89,74 @@ permissions:
   villagermerchants.staff:
     description: Hire shop staff and co-owners
     default: true
+  villagermerchants.rate:
+    description: Rate shops
+    default: true
+  villagermerchants.history:
+    description: /vm sales and /vm purchases
+    default: true
+  villagermerchants.claim:
+    description: /vm claim - collect items from expired shops
+    default: true
+
+  # ── Teleport perks (always ops-only by default) ──
+  villagermerchants.shops.bypass:
+    description: No cooldown, warm-up or cost when teleporting to shops
+    default: op
+    children:
+      villagermerchants.shops.bypass.cooldown: true
+      villagermerchants.shops.bypass.warmup: true
+      villagermerchants.shops.bypass.cost: true
+  villagermerchants.shops.bypass.cooldown:
+    description: Skip the teleport cooldown
+    default: op
+  villagermerchants.shops.bypass.warmup:
+    description: Skip the teleport warm-up
+    default: op
+  villagermerchants.shops.bypass.cost:
+    description: Teleport for free
+    default: op
+
+  # ── Upgrades menu (one node per upgrade; the menu shows if you have any) ──
+  villagermerchants.upgrades.*:
+    description: Every upgrade
+    default: op
+    children:
+      villagermerchants.upgrades.slots: true
+      villagermerchants.upgrades.tax: true
+      villagermerchants.upgrades.duration: true
+  villagermerchants.upgrades.slots:
+    description: Buy extra trade slots
+    default: true
+  villagermerchants.upgrades.tax:
+    description: Buy the rent discount
+    default: true
+  villagermerchants.upgrades.duration:
+    description: Buy longer max rent duration
+    default: true
+
+  # ── Customization tabs (the menu shows if you have any) ──
+  villagermerchants.customize.*:
+    description: Every customization tab
+    default: op
+    children:
+      villagermerchants.customize.skins: true
+      villagermerchants.customize.nametags: true
+      villagermerchants.customize.effects: true
+  villagermerchants.customize.skins:
+    description: Skins tab
+    default: true
+  villagermerchants.customize.nametags:
+    description: Nametags tab
+    default: true
+  villagermerchants.customize.effects:
+    description: Effects tab
+    default: true
+
+  # ── Not declared here because they are created at startup from your config and files:
+  #   villagermerchants.skin.<id>      villagermerchants.skin.*      (when customization.require-permission.skins is on)
+  #   villagermerchants.nametag.<id>   villagermerchants.nametag.*   (nametags.yml)
+  #   villagermerchants.effect.<id>    villagermerchants.effect.*    (effects.yml)
+  # ── And these are plain numbers, so any value works (LuckPerms does not need them registered):
+  #   villagermerchants.maxshops.<n>   villagermerchants.maxshops.unlimited
+  #   villagermerchants.maxstaff.<n>   villagermerchants.maxstaff.unlimited

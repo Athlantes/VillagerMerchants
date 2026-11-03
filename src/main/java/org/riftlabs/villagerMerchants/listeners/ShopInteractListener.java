@@ -38,12 +38,16 @@ public class ShopInteractListener implements Listener {
         Shop shop = sm.getShop(villager.getUniqueId());
         sm.refreshNameTag(villager);
 
-        if (!player.hasPermission("villagermerchants.use")) {
+        if (!plugin.access().canUse(player)) {
             plugin.msg().send(player, "misc.no-permission");
             return;
         }
 
         if (shop == null) {
+            if (!plugin.access().canRent(player)) {
+                plugin.msg().send(player, "shop.rent.no-rent-permission");
+                return;
+            }
             new RentGui(plugin, player, villager.getUniqueId()).open();
         } else if (shop.isMember(player.getUniqueId()) && !player.isSneaking()) {
             new OwnerMenuGui(plugin, player, shop).open();   // owner or staff; sneak = preview as a customer

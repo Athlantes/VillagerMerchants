@@ -113,7 +113,7 @@ public class PromotionManager {
     }
 
     public boolean startSale(Player p, Shop shop, int percent, long durationMs, boolean listed) {
-        if (!shop.can(p.getUniqueId(), Perm.SALES) || !p.hasPermission("villagermerchants.sales")) {
+        if (!shop.can(p.getUniqueId(), Perm.SALES) || !plugin.access().canRunSales(p)) {
             plugin.msg().send(p, "sale.no-permission");
             return false;
         }
@@ -233,7 +233,7 @@ public class PromotionManager {
     }
 
     public boolean buyFeatured(Player p, Shop shop, FeaturedPackage pkg) {
-        if (!shop.can(p.getUniqueId(), Perm.BILLING) || !p.hasPermission("villagermerchants.promote")) {
+        if (!shop.can(p.getUniqueId(), Perm.BILLING) || !plugin.access().canPromote(p)) {
             plugin.msg().send(p, "featured.no-permission");
             return false;
         }

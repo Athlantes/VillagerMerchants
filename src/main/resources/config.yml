@@ -6,6 +6,15 @@
 
 language: en               # lang/<language>.yml - copy lang/en.yml to add your own translation
 
+# ── Permissions ─────────────────────────────────────────────────────────────────
+# Every feature is a normal permission node, so LuckPerms (or any permissions plugin) controls it. The full
+# list is in PERMISSIONS.md. Out of the box nothing changes for existing servers: core features are open to
+# everybody and you take things away. Flip this to start locked instead:
+permissions:
+  strict: false            # true = core features (rent, /shops, teleport, sales, upgrades, customization ...) are
+                           # OP-only until you grant them, e.g.  /lp group default permission set villagermerchants.rent true
+                           # (applied on /vm reload)
+
 autosave-seconds: 30       # [restart]
 
 defaults:
@@ -15,7 +24,8 @@ rent:
   price: 5000.0            # price for 'base-days' of rent
   base-days: 7
   grace-hours: 48          # owner can still renew / empty storage after expiry
-  max-shops-per-player: 3
+  max-shops-per-player: 3  # for players with no rank node. More per rank: villagermerchants.maxshops.<n> (highest wins),
+                           # or villagermerchants.maxshops.unlimited. Set this to your LOWEST rank's limit.
   cancel-refund: 0.5       # fraction of the remaining rent value refunded on cancel
   expiry-check-seconds: 60 # [restart] how often expired rentals are checked
 
@@ -41,6 +51,11 @@ skins:                     # permanent unlocks
   type-price: 15000.0
   profession-price: 25000.0
   free: [plains, none]     # skin ids everybody owns from the start
+  # Lock single skins behind a permission node of your choice (works even when require-permission is off).
+  # An empty string "" keeps a skin open even when customization.require-permission.skins is on.
+  # permissions:
+  #   librarian: "villagermerchants.vip"
+  #   jungle: "myserver.rank.donor"
   # Optional price for one specific skin (overrides type-price / profession-price):
   # prices:
   #   jungle: 20000.0
@@ -148,6 +163,16 @@ customization:
   skins-enabled: true
   nametags-enabled: true
   effects-enabled: true       # particle effects tab (configured in effects.yml)
+  # Per-item permission gating. When a switch is on, EVERY item of that kind needs its own node
+  # (free skins excepted), so you give players the ones you want, e.g. to a VIP group:
+  #   /lp group vip permission set villagermerchants.skin.librarian true
+  #   /lp group vip permission set villagermerchants.skin.*  true         <- all skins
+  # Single items can also be locked without these switches: a "permission:" line in effects.yml / nametags.yml,
+  # or skins.permissions.<skin> above. Locked items still show in the menu, marked as locked.
+  require-permission:
+    skins: false              # villagermerchants.skin.<id>      (ids: plains, jungle, librarian ...)
+    nametags: false           # villagermerchants.nametag.<id>   (ids from nametags.yml)
+    effects: false            # villagermerchants.effect.<id>    (ids from effects.yml)
 # ── Sales: "20% off for 2 hours" ────────────────────────────────────────────────
 # Only money-priced trades are discounted (item-for-item trades have no price to cut).
 sales:
@@ -181,7 +206,7 @@ featured:
 # Only the owner can cancel the shop, buy upgrades, change the NPC's look or manage staff.
 staff:
   enabled: true
-  max-per-shop: 5
+  max-per-shop: 5               # for owners with no rank node. More per rank: villagermerchants.maxstaff.<n> / .unlimited
   # What each role may do. Allowed: STORAGE, TRADES, SALES, STATS, BILLING (or ALL).
   # The owner always can do everything; cancelling, upgrades, NPC look and staff stay owner-only.
   roles:

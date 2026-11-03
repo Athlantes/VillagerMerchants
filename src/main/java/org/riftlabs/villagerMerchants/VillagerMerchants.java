@@ -2,9 +2,6 @@ package org.riftlabs.villagerMerchants;
 
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Material;
-import org.bukkit.permissions.Permission;
-import org.bukkit.permissions.PermissionDefault;
-import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.riftlabs.villagerMerchants.commands.ShopCommand;
@@ -16,6 +13,7 @@ import org.riftlabs.villagerMerchants.listeners.JoinListener;
 import org.riftlabs.villagerMerchants.listeners.NpcLookTask;
 import org.riftlabs.villagerMerchants.listeners.PricePromptListener;
 import org.riftlabs.villagerMerchants.listeners.ShopInteractListener;
+import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.EffectManager;
 import org.riftlabs.villagerMerchants.manager.NametagManager;
@@ -46,12 +44,14 @@ public final class VillagerMerchants extends JavaPlugin {
     private CategoryRegistry categories;
     private Economy econ;
     private Messages messages;
+    private Access access;
 
     @Override
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
         messages = new Messages(this);   // lang/<language>.yml
+        access = new Access(this);       // every permission check goes through this
 
         if (!setupEconomy()) {
             getLogger().severe("Disabled: Vault (with an economy provider) was not found!");
@@ -60,7 +60,6 @@ public final class VillagerMerchants extends JavaPlugin {
         }
 
         CurrencyToken.init(this);
-        registerPermissions();
 
         if (!getDataFolder().exists()) getDataFolder().mkdirs();
 
@@ -75,6 +74,7 @@ public final class VillagerMerchants extends JavaPlugin {
         // Critical: Initialize managers BEFORE loading data
         nametagManager = new NametagManager(this);
         effectManager = new EffectManager(this);
+        access.registerAll();            // after effects load, so effect.<id> nodes exist
         shopManager = new ShopManager(this, databaseManager);
 
         shopManager.load();
@@ -127,26 +127,13 @@ public final class VillagerMerchants extends JavaPlugin {
         return econ != null;
     }
 
-    private void registerPermissions() {
-        PluginManager pm = getServer().getPluginManager();
-        addPermission(pm, "villagermerchants.shops", PermissionDefault.TRUE);
-        addPermission(pm, "villagermerchants.shops.teleport", PermissionDefault.TRUE);
-        addPermission(pm, "villagermerchants.shops.bypass", PermissionDefault.OP);
-        addPermission(pm, "villagermerchants.sales", PermissionDefault.TRUE);
-        addPermission(pm, "villagermerchants.promote", PermissionDefault.TRUE);
-        addPermission(pm, "villagermerchants.staff", PermissionDefault.TRUE);
-    }
-
-    private void addPermission(PluginManager pm, String node, PermissionDefault def) {
-        if (pm.getPermission(node) == null) pm.addPermission(new Permission(node, def));
-    }
-
     /** Reloads config.yml, the language file, effects.yml and categories.yml. */
     public void reloadAll() {
         reloadConfig();
         messages.load();
         effectManager.reload();
         categories.load();
+        access.registerAll();   // picks up permissions.strict and new effect / nametag ids
     }
 
     /** Icon material from {@code gui.materials.<key>} in config.yml, or {@code def} if unset or invalid. */
@@ -164,6 +151,7 @@ public final class VillagerMerchants extends JavaPlugin {
     public static VillagerMerchants getInstance() { return instance; }
     public Messages msg() { return messages; }
     public Messages getMessages() { return messages; }
+    public Access access() { return access; }
     public Economy getEconomy() { return econ; }
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public ShopManager getShopManager() { return shopManager; }
