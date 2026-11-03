@@ -17,6 +17,7 @@ import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.AntiAbuse;
 import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.EffectManager;
+import org.riftlabs.villagerMerchants.manager.LeaderboardManager;
 import org.riftlabs.villagerMerchants.manager.NametagManager;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.ProtectionManager;
@@ -52,6 +53,7 @@ public final class VillagerMerchants extends JavaPlugin {
     private AntiAbuse antiAbuse;
     private ProtectionManager protection;
     private PapiHook papi;
+    private LeaderboardManager leaderboards;
 
     @Override
     public void onLoad() {
@@ -99,6 +101,9 @@ public final class VillagerMerchants extends JavaPlugin {
         ratings.load();
         shopManager.startTasks();
         promotions.startTasks();
+        leaderboards = new LeaderboardManager(this, databaseManager);
+        leaderboards.load();
+        leaderboards.startTasks();
 
         customerTrades = new CustomerTradeListener(this);
         prompts = new PricePromptListener(this);
@@ -161,6 +166,7 @@ public final class VillagerMerchants extends JavaPlugin {
         effectManager.reload();
         categories.load();
         access.registerAll();   // picks up permissions.strict and new effect / nametag ids
+        if (leaderboards != null) leaderboards.reload();
         if (papi != null) papi.reload();
     }
 
@@ -194,6 +200,7 @@ public final class VillagerMerchants extends JavaPlugin {
     public PricePromptListener getPrompts() { return prompts; }
     public ChatPromptListener getChatPrompts() { return chatPrompts; }
     public PromotionManager getPromotions() { return promotions; }
+    public LeaderboardManager getLeaderboards() { return leaderboards; }
     public StaffManager getStaff() { return staff; }
     public CategoryRegistry getCategories() { return categories; }
 }

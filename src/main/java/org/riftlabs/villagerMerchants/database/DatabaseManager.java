@@ -22,6 +22,8 @@ public class DatabaseManager {
     public record Unread(long rows, long sales, double money, long maxId, List<TxRow> recent) {}
     public record RatingAgg(String shopId, String owner, double sum, int count) {}
     public record SalesCount(String shopId, String seller, long sales) {}
+    /** One leaderboard row: the shop owner, the score, and (for ratings) how many ratings it is based on. */
+    public record LbRow(String owner, double value, int count) {}
 
     public enum TxMode { SALES, PURCHASES, BOTH }
 
@@ -102,6 +104,14 @@ public class DatabaseManager {
                 + "trades INTEGER NOT NULL DEFAULT 0, "
                 + "money REAL NOT NULL DEFAULT 0, "
                 + "PRIMARY KEY (shop_id, seller_uuid));";
+        // Leaderboards: stats of the CURRENT daily/weekly period only; rows are cleared when a period resets.
+        String lbState = "CREATE TABLE IF NOT EXISTS lb_state (period VARCHAR(16) PRIMARY KEY, start_ts INTEGER NOT NULL);";
+        String lbEarnings = "CREATE TABLE IF NOT EXISTS lb_earnings ("
+                + "period VARCHAR(16) NOT NULL, owner_uuid VARCHAR(36) NOT NULL, money REAL NOT NULL DEFAULT 0, "
+                + "PRIMARY KEY (period, owner_uuid));";
+        String lbVisits = "CREATE TABLE IF NOT EXISTS lb_visits ("
+                + "period VARCHAR(16) NOT NULL, owner_uuid VARCHAR(36) NOT NULL, visitor_uuid VARCHAR(36) NOT NULL, "
+                + "PRIMARY KEY (period, owner_uuid, visitor_uuid));";
         try (Connection c = getConnection(); Statement s = c.createStatement()) {
             s.execute("PRAGMA journal_mode = WAL;");
             s.execute(profiles);
@@ -110,6 +120,10 @@ public class DatabaseManager {
             s.execute(transactions);
             s.execute(ratings);
             s.execute(salesTotals);
+            s.execute(lbState);
+            s.execute(lbEarnings);
+            s.execute(lbVisits);
+            s.execute("CREATE INDEX IF NOT EXISTS idx_rating_ts ON shop_ratings (ts);");
             // One-time backfill for a database that has a log but no totals yet (the table was just created).
             s.execute("INSERT INTO sales_totals (shop_id, seller_uuid, trades, money) "
                     + "SELECT shop_id, seller_uuid, COALESCE(SUM(trades), 0), COALESCE(SUM(money), 0) "
@@ -446,6 +460,109 @@ public class DatabaseManager {
             plugin.getLogger().severe("Failed to total all transactions: " + e.getMessage());
         }
         return new Totals(0, 0, 0);
+    }
+
+    // ------------------------------------------------------------ leaderboards
+
+    public Map<String, Long> lbLoadState() {
+        Map<String, Long> out = new HashMap<>();
+        try (Connection c = getConnection(); Statement st = c.createStatement();
+             ResultSet rs = st.executeQuery("SELECT period, start_ts FROM lb_state")) {
+            while (rs.next()) out.put(rs.getString(1), rs.getLong(2));
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to load leaderboard state: " + e.getMessage());
+        }
+        return out;
+    }
+
+    public void lbSetState(String period, long start) {
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(
+                "INSERT INTO lb_state (period, start_ts) VALUES (?, ?) ON CONFLICT(period) DO UPDATE SET start_ts = excluded.start_ts")) {
+            ps.setString(1, period);
+            ps.setLong(2, start);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to save leaderboard state: " + e.getMessage());
+        }
+    }
+
+    public void lbAddEarning(String period, String owner, double money) {
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(
+                "INSERT INTO lb_earnings (period, owner_uuid, money) VALUES (?, ?, ?) "
+                        + "ON CONFLICT(period, owner_uuid) DO UPDATE SET money = money + excluded.money")) {
+            ps.setString(1, period);
+            ps.setString(2, owner);
+            ps.setDouble(3, money);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to record leaderboard earnings: " + e.getMessage());
+        }
+    }
+
+    /** One row per (period, shop owner, visitor): repeat visits by the same player don't count again. */
+    public void lbAddVisit(String period, String owner, String visitor) {
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(
+                "INSERT OR IGNORE INTO lb_visits (period, owner_uuid, visitor_uuid) VALUES (?, ?, ?)")) {
+            ps.setString(1, period);
+            ps.setString(2, owner);
+            ps.setString(3, visitor);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to record leaderboard visit: " + e.getMessage());
+        }
+    }
+
+    public List<LbRow> lbEarnings(String period, int limit) {
+        return lbQuery("SELECT owner_uuid, money, 0 FROM lb_earnings WHERE period = ? AND money > 0 "
+                + "ORDER BY money DESC LIMIT ?", ps -> { ps.setString(1, period); ps.setInt(2, limit); });
+    }
+
+    public List<LbRow> lbVisits(String period, int limit) {
+        return lbQuery("SELECT owner_uuid, COUNT(*), 0 FROM lb_visits WHERE period = ? GROUP BY owner_uuid "
+                + "ORDER BY COUNT(*) DESC LIMIT ?", ps -> { ps.setString(1, period); ps.setInt(2, limit); });
+    }
+
+    /** Average of the ratings given since {@code since}, for owners with at least {@code minCount} of them. */
+    public List<LbRow> lbRatings(long since, int minCount, int limit) {
+        return lbQuery("SELECT owner_uuid, AVG(stars), COUNT(*) FROM shop_ratings WHERE ts >= ? GROUP BY owner_uuid "
+                + "HAVING COUNT(*) >= ? ORDER BY AVG(stars) DESC, COUNT(*) DESC LIMIT ?",
+                ps -> { ps.setLong(1, since); ps.setInt(2, minCount); ps.setInt(3, limit); });
+    }
+
+    private interface Binder { void bind(PreparedStatement ps) throws SQLException; }
+
+    private List<LbRow> lbQuery(String q, Binder b) {
+        List<LbRow> out = new ArrayList<>();
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
+            b.bind(ps);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) out.add(new LbRow(rs.getString(1), rs.getDouble(2), rs.getInt(3)));
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to read leaderboard: " + e.getMessage());
+        }
+        return out;
+    }
+
+    /** Clears a period's stats and records when its new period began. */
+    public void lbReset(String period, long newStart) {
+        try (Connection c = getConnection()) {
+            c.setAutoCommit(false);
+            try (PreparedStatement a = c.prepareStatement("DELETE FROM lb_earnings WHERE period = ?");
+                 PreparedStatement v = c.prepareStatement("DELETE FROM lb_visits WHERE period = ?");
+                 PreparedStatement st = c.prepareStatement(
+                         "INSERT INTO lb_state (period, start_ts) VALUES (?, ?) ON CONFLICT(period) DO UPDATE SET start_ts = excluded.start_ts")) {
+                a.setString(1, period); a.executeUpdate();
+                v.setString(1, period); v.executeUpdate();
+                st.setString(1, period); st.setLong(2, newStart); st.executeUpdate();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to reset leaderboard: " + e.getMessage());
+        }
     }
 
     public Unread takeUnread(String seller, int maxLines) {

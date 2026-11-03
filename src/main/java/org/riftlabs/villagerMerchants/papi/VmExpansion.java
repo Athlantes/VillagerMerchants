@@ -6,6 +6,7 @@ import org.bukkit.OfflinePlayer;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
+import org.riftlabs.villagerMerchants.manager.LeaderboardManager;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.Locale;
@@ -30,6 +31,10 @@ import java.util.UUID;
  *   rent_days_left       the same in whole days (0 when expired, empty with no shop)
  *   owned_shops          how many shops the player has rented
  *   my_sales             trades the player has ever made through their shops
+ *
+ * Leaderboards:
+ *   top_<daily|weekly>_<earners|rated|visited>_<rank>_<name|value|raw>   e.g. top_daily_earners_1_name
+ *   reset_in_<daily|weekly>                                              time until that board resets
  */
 public final class VmExpansion extends PlaceholderExpansion {
 
@@ -52,7 +57,13 @@ public final class VmExpansion extends PlaceholderExpansion {
     @Override
     public @Nullable String onRequest(OfflinePlayer player, @NotNull String params) {
         PapiHook.Snapshot s = hook.snapshot();
-        switch (params.toLowerCase(Locale.ROOT)) {
+        String lower = params.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("top_")) return top(lower);
+        if (lower.startsWith("reset_in_")) {
+            LeaderboardManager.Period per = LeaderboardManager.Period.parse(lower.substring("reset_in_".length()));
+            return per == null ? null : Text.duration(plugin.getLeaderboards().millisUntilReset(per));
+        }
+        switch (lower) {
             // ---- server-wide
             case "active_shops":       return String.valueOf(s.active());
             case "rented_shops":       return String.valueOf(s.rented());
@@ -87,6 +98,29 @@ public final class VmExpansion extends PlaceholderExpansion {
                 return rent == null ? "" : String.valueOf(Math.max(0, (rent.soonestExpiry() - now) / DAY_MS));
             default: return null;
         }
+    }
+
+    /** top_<daily|weekly>_<earners|rated|visited>_<rank>_<name|value|raw> */
+    private String top(String key) {
+        String[] parts = key.split("_");
+        if (parts.length != 5) return null;
+        LeaderboardManager.Period period = LeaderboardManager.Period.parse(parts[1]);
+        LeaderboardManager.Category cat = LeaderboardManager.Category.parse(parts[2]);
+        int rank;
+        try { rank = Integer.parseInt(parts[3]); } catch (NumberFormatException e) { return null; }
+        String field = parts[4];
+        if (period == null || cat == null || rank < 1 || !(field.equals("name") || field.equals("value") || field.equals("raw"))) return null;
+
+        var lb = plugin.getLeaderboards();
+        var list = lb.top(period, cat);
+        if (rank > list.size()) return field.equals("raw") ? "0" : plugin.getConfig().getString("leaderboards.placeholder-empty", "-");
+        var e = list.get(rank - 1);
+        return switch (field) {
+            case "name" -> e.name();
+            case "value" -> lb.format(cat, e);
+            default -> cat == LeaderboardManager.Category.VISITS ? String.valueOf((long) e.value())
+                    : String.format(Locale.ROOT, "%.2f", e.value());
+        };
     }
 
     private String status(PapiHook.OwnerRent rent, long now) {

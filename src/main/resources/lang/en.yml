@@ -766,6 +766,7 @@ cmd:
     - "<gold>/vm claim <gray>- retrieve items from expired shops"
     - "<gold>/shops <gray>- browse and teleport to open shops"
     - "<gold>/shops search <item> | category <name> | sale <gray>- find shops"
+    - "<gold>/shops top [earners|rated|visited] [daily|weekly] <gray>- shop leaderboards"
     - "<gold>/vm sale start <percent> <time> | stop <gray>- run a sale (e.g. /vm sale start 20 2h)"
     - "<gold>/vm staff list | add <player> [role] | remove <player> | role <player> <role>"
     - "<gold>/vm sales | purchases [page] <gray>- your transaction log"
@@ -856,3 +857,28 @@ protection:
     line: "<gray><name>: <white><value>"
     here-ok: "<prefix><green>A shop is allowed where you're standing."
     here-denied: "<prefix><red>A shop is NOT allowed where you're standing:"
+
+# ───────────────────────────── leaderboards ─────────────────────────────
+# /shops top, the reset announcement and reward messages
+leaderboards:
+  disabled: "<prefix><red>Leaderboards are turned off."
+  period-disabled: "<prefix><red>That leaderboard is turned off."
+  usage: "<prefix><red>Usage: /shops top [earners|rated|visited] [daily|weekly]"
+  hint: "<gray>See more with <yellow>/shops top <earners|rated|visited> <daily|weekly></yellow>"
+  empty: "<gray>  Nobody yet."
+  title:
+    earners: "Top earners"
+    rated: "Best-rated shops"
+    visited: "Most-visited shops"
+  period:
+    daily: "daily"
+    weekly: "weekly"
+  header: "<gold>--- <yellow><title></yellow> <gray>(<period>, resets in <white><reset></white>)</gray> ---"
+  line: "<gray><rank>. <white><name> <dark_gray>- <yellow><value>"
+  value:
+    rating: "<avg>\u2605 (<count> ratings)"
+    visits: "<count> visitors"
+  announce-header: "<gold>--- <yellow>The <period> shop leaderboards have reset</yellow> ---"
+  announce-line: "<gray><board>: <white><name></white> <dark_gray>(<value>)"
+  reward-message: "<prefix><green>You placed <white>#<rank></white> in <white><board></white> (<period>)!<reward>"
+  reward-money: " <gray>You received <gold><money></gold>."

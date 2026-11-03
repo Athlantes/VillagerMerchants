@@ -19,6 +19,7 @@ import org.riftlabs.villagerMerchants.database.DatabaseManager.TxMode;
 import org.riftlabs.villagerMerchants.gui.ShopDirectoryGui;
 import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
+import org.riftlabs.villagerMerchants.manager.LeaderboardManager;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.model.Perm;
@@ -216,7 +217,43 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 new ShopDirectoryGui(plugin, p).withCategory(c.id()).open();
             }
             case "sale", "sales" -> new ShopDirectoryGui(plugin, p).withSaleOnly(true).open();
+            case "top", "leaderboard", "lb", "ranking" -> leaderboardCommand(p, java.util.Arrays.copyOfRange(args, 1, args.length));
             default -> new ShopDirectoryGui(plugin, p).open();
+        }
+    }
+
+    // ------------------------------------------------------------ /shops top [earners|rated|visited] [daily|weekly]
+
+    private void leaderboardCommand(Player p, String[] args) {
+        var m = plugin.msg();
+        LeaderboardManager lb = plugin.getLeaderboards();
+        if (!lb.enabled() || lb.enabledPeriods().isEmpty()) { m.send(p, "leaderboards.disabled"); return; }
+        LeaderboardManager.Category cat = null;
+        LeaderboardManager.Period period = null;
+        for (String a : args) {
+            LeaderboardManager.Category c = LeaderboardManager.Category.parse(a);
+            LeaderboardManager.Period pe = LeaderboardManager.Period.parse(a);
+            if (c != null) cat = c;
+            else if (pe != null) period = pe;
+            else { m.send(p, "leaderboards.usage"); return; }
+        }
+        if (period == null) period = lb.enabledPeriods().get(0);
+        if (!lb.periodEnabled(period)) { m.send(p, "leaderboards.period-disabled"); return; }
+        if (cat != null) { showBoard(p, lb, period, cat, lb.size()); return; }
+        for (LeaderboardManager.Category c : LeaderboardManager.Category.values()) showBoard(p, lb, period, c, lb.chatLines());
+        m.send(p, "leaderboards.hint");
+    }
+
+    private void showBoard(Player p, LeaderboardManager lb, LeaderboardManager.Period period,
+                           LeaderboardManager.Category cat, int limit) {
+        var m = plugin.msg();
+        m.send(p, "leaderboards.header", "title", m.raw("leaderboards.title." + cat.id),
+                "period", m.raw("leaderboards.period." + period.id), "reset", Text.duration(lb.millisUntilReset(period)));
+        List<LeaderboardManager.Entry> list = lb.top(period, cat);
+        if (list.isEmpty()) { m.send(p, "leaderboards.empty"); return; }
+        for (int i = 0; i < list.size() && i < limit; i++) {
+            LeaderboardManager.Entry e = list.get(i);
+            m.send(p, "leaderboards.line", "rank", i + 1, "name", e.name(), "value", lb.format(cat, e));
         }
     }
 
@@ -406,7 +443,9 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
     private List<String> completeShops(String[] args) {
         List<String> out = new ArrayList<>();
         if (args.length == 1) {
-            for (String o : List.of("search", "category", "sale")) if (o.startsWith(args[0].toLowerCase())) out.add(o);
+            for (String o : List.of("search", "category", "sale", "top")) if (o.startsWith(args[0].toLowerCase())) out.add(o);
+        } else if (args.length >= 2 && args.length <= 3 && args[0].equalsIgnoreCase("top")) {
+            for (String o : List.of("earners", "rated", "visited", "daily", "weekly")) if (o.startsWith(args[args.length - 1].toLowerCase())) out.add(o);
         } else if (args.length >= 2 && args[0].equalsIgnoreCase("category")) {
             for (CategoryRegistry.Category c : plugin.getCategories().all()) if (c.id().startsWith(args[1].toLowerCase())) out.add(c.id());
         } else if (args.length >= 2 && args[0].equalsIgnoreCase("search")) {

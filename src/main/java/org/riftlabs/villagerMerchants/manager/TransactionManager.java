@@ -131,6 +131,7 @@ public class TransactionManager {
         salesCounts.merge(key(shop), (long) times, Long::sum);
         totalSales.add(times);
         totalMoney.add(total);
+        if (money && plugin.getLeaderboards() != null) plugin.getLeaderboards().recordEarning(seller, total);
 
         if (sellerOnline != null && notifyOn) notifySale(sellerOnline, row);
     }

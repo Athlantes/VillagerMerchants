@@ -62,6 +62,7 @@ public class ShopInteractListener implements Listener {
         } else if (!shop.isActive(System.currentTimeMillis())) {
             plugin.msg().send(player, "customer.shop-closed");
         } else {
+            plugin.getLeaderboards().recordVisit(player, shop);
             plugin.getCustomerTrades().open(player, shop);
         }
     }

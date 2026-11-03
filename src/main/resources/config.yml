@@ -40,6 +40,45 @@ placeholders:
     expired: "&cExpired"
     none: "&7None"
 
+# Daily / weekly leaderboards: top earners, best-rated and most-visited shops. See /shops top.
+# Shops are ranked by their owner. Staff and the owner never count as visitors; each player counts once per period.
+leaderboards:
+  enabled: true
+  size: 10                 # entries kept per board (also the most /shops top <board> shows)
+  chat-lines: 5            # entries per board in plain /shops top
+  refresh-seconds: 30      # how often the boards (and %vm_top_...% placeholders) are recalculated
+  timezone: ""             # e.g. "Europe/Bucharest". Empty = the server's timezone
+  reset-time: "00:00"      # HH:mm when a new day / week starts
+  weekly-reset-day: MONDAY # MONDAY ... SUNDAY
+  min-ratings: 3           # a shop needs this many ratings given during the period to enter the rated board
+  announce: true           # broadcast the winners of each board when a period resets
+  placeholder-empty: "-"   # %vm_top_...% text for ranks nobody holds yet
+  periods:
+    daily: true
+    weekly: true
+  # Rewards, paid to the owner of the shop at that rank when a period resets. Both parts are optional.
+  # Commands run as console; %player% %uuid% %rank% %value% %period% %board% are replaced. Commands run even if the
+  # winner is offline, so use ones that work for offline players (e.g. a permissions or economy command).
+  # Layout: rewards.<daily|weekly>.<earners|rated|visited>.<rank>
+  rewards: {}
+  #  daily:
+  #    earners:
+  #      1:
+  #        money: 1000
+  #        commands:
+  #          - "give %player% diamond 2"
+  #      2:
+  #        money: 500
+  #      3:
+  #        money: 250
+  #  weekly:
+  #    visited:
+  #      1:
+  #        money: 2500
+  #    rated:
+  #      1:
+  #        money: 2500
+
 # cost of next level = base-cost * multiplier ^ currentLevel
 upgrades:
   slots:

@@ -14,7 +14,7 @@ commands:
     usage: /vm <claim|sales|purchases|rate|sale|staff|create|remove|reload|suspicious|protection>
   shops:
     description: Browse open shops and teleport to them
-    usage: /shops [search <item> | category <name> | sale]
+    usage: /shops [search <item> | category <name> | sale | top [earners|rated|visited] [daily|weekly]]
 
 permissions:
   # ── Umbrella: everything, including every skin / nametag / effect and unlimited shops ──
