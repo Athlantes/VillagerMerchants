@@ -24,10 +24,21 @@ rent:
   price: 5000.0            # price for 'base-days' of rent
   base-days: 7
   grace-hours: 48          # owner can still renew / empty storage after expiry
-  max-shops-per-player: 3  # for players with no rank node. More per rank: villagermerchants.maxshops.<n> (highest wins),
+  max-shops-per-player: 1  # for players with no rank node. More per rank: villagermerchants.maxshops.<n> (highest wins),
                            # or villagermerchants.maxshops.unlimited. Set this to your LOWEST rank's limit.
   cancel-refund: 0.5       # fraction of the remaining rent value refunded on cancel
   expiry-check-seconds: 60 # [restart] how often expired rentals are checked
+
+# PlaceholderAPI: %vm_active_shops%, %vm_total_sales%, %vm_rent_status% ... (full list on the plugin page / README)
+placeholders:
+  enabled: true            # [restart] register the %vm_...% expansion when PlaceholderAPI is installed
+  refresh-seconds: 5       # how often shop counts are recomputed (applied by /vm reload)
+  expiring-hours: 24       # %vm_rent_status% turns "expiring" when a rental has less than this left
+  status:                  # text of %vm_rent_status%; & colour codes work
+    active: "&aActive"
+    expiring: "&eExpiring"
+    expired: "&cExpired"
+    none: "&7None"
 
 # cost of next level = base-cost * multiplier ^ currentLevel
 upgrades:

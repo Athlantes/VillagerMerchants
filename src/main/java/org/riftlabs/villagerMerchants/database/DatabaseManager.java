@@ -94,6 +94,14 @@ public class DatabaseManager {
                 + "stars INTEGER NOT NULL, "
                 + "ts INTEGER NOT NULL, "
                 + "PRIMARY KEY (shop_id, owner_uuid, rater_uuid));";
+        // Lifetime sales per shop and owner. Kept apart from the transaction log so log.retention-days purges
+        // never change the totals shown by the placeholders, the shop directory and the owner menu.
+        String salesTotals = "CREATE TABLE IF NOT EXISTS sales_totals ("
+                + "shop_id VARCHAR(36) NOT NULL, "
+                + "seller_uuid VARCHAR(36) NOT NULL, "
+                + "trades INTEGER NOT NULL DEFAULT 0, "
+                + "money REAL NOT NULL DEFAULT 0, "
+                + "PRIMARY KEY (shop_id, seller_uuid));";
         try (Connection c = getConnection(); Statement s = c.createStatement()) {
             s.execute("PRAGMA journal_mode = WAL;");
             s.execute(profiles);
@@ -101,6 +109,11 @@ public class DatabaseManager {
             s.execute(claims);
             s.execute(transactions);
             s.execute(ratings);
+            s.execute(salesTotals);
+            // One-time backfill for a database that has a log but no totals yet (the table was just created).
+            s.execute("INSERT INTO sales_totals (shop_id, seller_uuid, trades, money) "
+                    + "SELECT shop_id, seller_uuid, COALESCE(SUM(trades), 0), COALESCE(SUM(money), 0) "
+                    + "FROM transactions WHERE NOT EXISTS (SELECT 1 FROM sales_totals) GROUP BY shop_id, seller_uuid");
             s.execute("CREATE INDEX IF NOT EXISTS idx_tx_seller ON transactions (seller_uuid, ts);");
             s.execute("CREATE INDEX IF NOT EXISTS idx_tx_buyer ON transactions (buyer_uuid, ts);");
             s.execute("CREATE INDEX IF NOT EXISTS idx_tx_shop ON transactions (shop_id, seller_uuid, ts);");
@@ -195,7 +208,7 @@ public class DatabaseManager {
 
     public List<SalesCount> loadSalesCounts() {
         List<SalesCount> out = new ArrayList<>();
-        String q = "SELECT shop_id, seller_uuid, COALESCE(SUM(trades), 0) FROM transactions GROUP BY shop_id, seller_uuid";
+        String q = "SELECT shop_id, seller_uuid, trades FROM sales_totals";
         try (Connection c = getConnection(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(q)) {
             while (rs.next()) out.add(new SalesCount(rs.getString(1), rs.getString(2), rs.getLong(3)));
         } catch (SQLException e) {
@@ -324,21 +337,36 @@ public class DatabaseManager {
     public void insertTransaction(TxRow r, boolean notified) {
         String q = "INSERT INTO transactions (ts, shop_id, seller_uuid, buyer_uuid, buyer_name, kind, item_type, "
                 + "item_name, item_qty, trades, money, pay_summary, notified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
-            ps.setLong(1, r.ts());
-            ps.setString(2, r.shopId());
-            ps.setString(3, r.seller());
-            ps.setString(4, r.buyer());
-            ps.setString(5, r.buyerName());
-            ps.setString(6, r.kind());
-            ps.setString(7, r.itemType());
-            ps.setString(8, r.itemName());
-            ps.setInt(9, r.itemQty());
-            ps.setInt(10, r.trades());
-            ps.setDouble(11, r.money());
-            ps.setString(12, r.paySummary());
-            ps.setInt(13, notified ? 1 : 0);
-            ps.executeUpdate();
+        String totals = "INSERT INTO sales_totals (shop_id, seller_uuid, trades, money) VALUES (?, ?, ?, ?) "
+                + "ON CONFLICT(shop_id, seller_uuid) DO UPDATE SET trades = trades + excluded.trades, money = money + excluded.money";
+        try (Connection c = getConnection()) {
+            c.setAutoCommit(false);
+            try (PreparedStatement ps = c.prepareStatement(q); PreparedStatement pt = c.prepareStatement(totals)) {
+                ps.setLong(1, r.ts());
+                ps.setString(2, r.shopId());
+                ps.setString(3, r.seller());
+                ps.setString(4, r.buyer());
+                ps.setString(5, r.buyerName());
+                ps.setString(6, r.kind());
+                ps.setString(7, r.itemType());
+                ps.setString(8, r.itemName());
+                ps.setInt(9, r.itemQty());
+                ps.setInt(10, r.trades());
+                ps.setDouble(11, r.money());
+                ps.setString(12, r.paySummary());
+                ps.setInt(13, notified ? 1 : 0);
+                ps.executeUpdate();
+
+                pt.setString(1, r.shopId());
+                pt.setString(2, r.seller());
+                pt.setInt(3, r.trades());
+                pt.setDouble(4, r.money());
+                pt.executeUpdate();
+                c.commit();
+            } catch (SQLException e) {
+                c.rollback();
+                throw e;
+            }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to log transaction: " + e.getMessage());
         }
@@ -405,6 +433,17 @@ public class DatabaseManager {
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to total shop sales: " + e.getMessage());
+        }
+        return new Totals(0, 0, 0);
+    }
+
+    /** Every sale ever made, across all shops, unaffected by log purges (feeds %vm_total_sales% / %vm_total_revenue%). */
+    public Totals allTotals() {
+        String q = "SELECT COUNT(*), COALESCE(SUM(trades), 0), COALESCE(SUM(money), 0) FROM sales_totals";
+        try (Connection c = getConnection(); Statement st = c.createStatement(); ResultSet rs = st.executeQuery(q)) {
+            if (rs.next()) return new Totals(rs.getLong(1), rs.getLong(2), rs.getDouble(3));
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to total all transactions: " + e.getMessage());
         }
         return new Totals(0, 0, 0);
     }

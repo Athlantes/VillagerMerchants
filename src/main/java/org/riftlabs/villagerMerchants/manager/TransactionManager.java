@@ -26,6 +26,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.DoubleAdder;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Consumer;
 
 /**
@@ -42,6 +44,9 @@ public class TransactionManager {
     private final DatabaseManager db;
     /** "shopId|ownerId" -> lifetime trade executions. Keyed by owner so a new renter starts at zero. */
     private final Map<String, Long> salesCounts = new HashMap<>();
+    /** Server-wide running totals (seeded on startup from the sales_totals table, which log purges never touch). Adders, so placeholder reads from any thread are safe. */
+    private final LongAdder totalSales = new LongAdder();
+    private final DoubleAdder totalMoney = new DoubleAdder();
 
     public TransactionManager(VillagerMerchants plugin, DatabaseManager db) {
         this.plugin = plugin;
@@ -67,6 +72,9 @@ public class TransactionManager {
         for (DatabaseManager.SalesCount sc : db.loadSalesCounts()) {
             salesCounts.put(key(sc.shopId(), sc.seller()), sc.sales());
         }
+        DatabaseManager.Totals all = db.allTotals();
+        totalSales.add(all.sales());
+        totalMoney.add(all.money());
         int days = cfg().getInt("log.retention-days", 0);
         if (days > 0) {
             long cutoff = System.currentTimeMillis() - days * 86_400_000L;
@@ -78,6 +86,23 @@ public class TransactionManager {
     }
 
     public long salesCount(Shop s) { return salesCounts.getOrDefault(key(s), 0L); }
+
+    /** Trades executed on the whole server, ever (item-for-item trades count too). */
+    public long totalSales() { return totalSales.sum(); }
+    /** Money earned by all shops combined, ever. */
+    public double totalMoney() { return Text.round2(totalMoney.sum()); }
+
+    /** Lifetime trades per shop owner, summed over every shop they ever rented. Main thread only. */
+    public Map<UUID, Long> salesByOwner() {
+        Map<UUID, Long> out = new HashMap<>();
+        for (Map.Entry<String, Long> e : salesCounts.entrySet()) {
+            int i = e.getKey().indexOf('|');
+            if (i < 0) continue;
+            try { out.merge(UUID.fromString(e.getKey().substring(i + 1)), e.getValue(), Long::sum); }
+            catch (IllegalArgumentException ignored) {}
+        }
+        return out;
+    }
 
     // ------------------------------------------------------------ recording
 
@@ -104,6 +129,8 @@ public class TransactionManager {
         boolean seen = sellerOnline != null || !notifyOn;
         db.async(() -> db.insertTransaction(row, seen));
         salesCounts.merge(key(shop), (long) times, Long::sum);
+        totalSales.add(times);
+        totalMoney.add(total);
 
         if (sellerOnline != null && notifyOn) notifySale(sellerOnline, row);
     }

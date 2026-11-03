@@ -25,6 +25,7 @@ import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.manager.TeleportManager;
 import org.riftlabs.villagerMerchants.manager.TransactionManager;
+import org.riftlabs.villagerMerchants.papi.PapiHook;
 import org.riftlabs.villagerMerchants.util.CurrencyToken;
 import org.riftlabs.villagerMerchants.util.CustomItems;
 import org.riftlabs.villagerMerchants.util.Messages;
@@ -50,6 +51,7 @@ public final class VillagerMerchants extends JavaPlugin {
     private Access access;
     private AntiAbuse antiAbuse;
     private ProtectionManager protection;
+    private PapiHook papi;
 
     @Override
     public void onLoad() {
@@ -120,11 +122,17 @@ public final class VillagerMerchants extends JavaPlugin {
                 getCommand(name).setTabCompleter(cmd);
             }
         }
+        // %vm_...% placeholders. PapiHook is only loaded when PlaceholderAPI is present.
+        if (getConfig().getBoolean("placeholders.enabled", true)
+                && getServer().getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            papi = PapiHook.register(this);
+        }
         getLogger().info("VillagerMerchants enabled.");
     }
 
     @Override
     public void onDisable() {
+        if (papi != null) papi.unregister();
         if (antiAbuse != null) antiAbuse.close();
         if (nametagManager != null) nametagManager.cleanup();
         if (effectManager != null) effectManager.cleanup();
@@ -153,6 +161,7 @@ public final class VillagerMerchants extends JavaPlugin {
         effectManager.reload();
         categories.load();
         access.registerAll();   // picks up permissions.strict and new effect / nametag ids
+        if (papi != null) papi.reload();
     }
 
     /** Icon material from {@code gui.materials.<key>} in config.yml, or {@code def} if unset or invalid. */
