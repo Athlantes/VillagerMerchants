@@ -9,10 +9,10 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Display;
+import org.bukkit.FluidCollisionMode;
+import org.bukkit.util.RayTraceResult;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.TxMode;
@@ -20,6 +20,7 @@ import org.riftlabs.villagerMerchants.gui.ShopDirectoryGui;
 import org.riftlabs.villagerMerchants.manager.Access;
 import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.LeaderboardManager;
+import org.riftlabs.villagerMerchants.manager.NpcManager;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.StaffManager;
 import org.riftlabs.villagerMerchants.model.Perm;
@@ -92,51 +93,41 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             }
             case "create" -> {
                 if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
+                if (args.length < 2) { plugin.msg().send(p, "cmd.create.usage"); return true; }
+                String id = args[1].toLowerCase(Locale.ROOT);
+                if (!NpcManager.ID.matcher(id).matches()) { plugin.msg().send(p, "cmd.bad-id"); return true; }
+                if (plugin.getNpcs().get(id) != null) { plugin.msg().send(p, "cmd.id-taken", "id", id); return true; }
                 Location loc = p.getLocation();
                 var verdict = plugin.getProtection().checkCreate(p, loc);
                 if (!verdict.allowed()) { verdict.send(plugin.msg(), p); return true; }
-                Villager npc = (Villager) p.getWorld().spawnEntity(loc, EntityType.VILLAGER);
-                npc.setVillagerType(Villager.Type.PLAINS);
-                npc.setProfession(Villager.Profession.NONE);
-                npc.setAdult();
-                npc.setAgeLock(true);
-                npc.setAI(false);
-                npc.setInvulnerable(true);
-                npc.setCollidable(false);
-                npc.setSilent(true);
-                npc.setPersistent(false); // We now control persistence dynamically
-                npc.setRemoveWhenFarAway(false);
-                npc.setCanPickupItems(false);
-                npc.customName(null);
-                npc.setCustomNameVisible(false);
-
-                npc.getPersistentDataContainer().set(plugin.getShopManager().getShopKey(), PersistentDataType.BYTE, (byte) 1);
-
-                String formattedLoc = loc.getWorld().getName() + ";" + loc.getX() + ";" + loc.getY() + ";" + loc.getZ() + ";" + loc.getYaw() + ";" + loc.getPitch();
-
-                // Save this brand-new, unrented dummy shop to the DB so it persists on restart
-                Shop blankShop = new Shop(npc.getUniqueId(), UUID.randomUUID(), 0, formattedLoc);
-                plugin.getShopManager().saveShop(blankShop);
-
-                plugin.getNametagManager().spawnNametag(npc, plugin.msg().raw("nametag.available"));
-                plugin.msg().send(p, "cmd.npc-created");
+                plugin.getNpcs().createVanilla(id, loc);
+                plugin.msg().send(p, "cmd.npc-created", "id", id);
+            }
+            case "link" -> {
+                if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
+                linkCommand(p, args);
             }
             case "remove" -> {
-                if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
-                Villager v = findLookedShopNpc(p);
-                if (v == null) {
-                    plugin.msg().send(p, "cmd.look-at-npc", "range", lookRange());
-                    return true;
+                boolean purge = args.length > 1 && args[args.length - 1].equalsIgnoreCase("purge");
+                String given = args.length > 1 && !args[1].equalsIgnoreCase("purge") ? args[1].toLowerCase(Locale.ROOT) : null;
+                NpcManager.Slot slot;
+                if (given != null) {
+                    slot = plugin.getNpcs().get(given);
+                    if (slot == null) { plugin.msg().send(sender, "cmd.unknown-id", "id", given); return true; }
+                } else {
+                    if (!(sender instanceof Player p)) { plugin.msg().send(sender, "cmd.remove.usage"); return true; }
+                    Entity looked = findLookedShopNpc(p);
+                    slot = looked == null ? null : plugin.getNpcs().ofEntity(looked);
+                    if (slot == null) { plugin.msg().send(p, "cmd.look-at-npc", "range", lookRange()); return true; }
                 }
-                Shop s = plugin.getShopManager().getShop(v.getUniqueId());
-                if (s != null) plugin.getShopManager().releaseShop(s, true);
-
-                for (Entity passenger : v.getPassengers()) passenger.remove();
-                plugin.getNametagManager().removeNametag(v.getUniqueId());
-                plugin.getEffectManager().clear(v.getUniqueId());
-
-                v.remove();
-                plugin.msg().send(p, s != null ? "cmd.npc-removed-owned" : "cmd.npc-removed");
+                Shop s = plugin.getShopManager().shopOfNpc(slot.id);
+                if (s != null) plugin.getShopManager().releaseShop(s, true);   // owner's items go to /vm claim
+                boolean linked = slot.linked();
+                plugin.getNpcs().remove(slot, purge);
+                plugin.msg().send(sender, linked && !purge
+                                ? (s != null ? "cmd.npc-unlinked-owned" : "cmd.npc-unlinked")
+                                : (s != null ? "cmd.npc-removed-owned" : "cmd.npc-removed"),
+                        "id", slot.id);
             }
             case "effect" -> {
                 var fx = plugin.getEffectManager();
@@ -148,7 +139,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
-                Villager v = findLookedShopNpc(p);
+                Entity v = findLookedShopNpc(p);
                 if (v == null) { plugin.msg().send(p, "cmd.look-at-npc", "range", lookRange()); return true; }
                 if (act.equals("off")) {
                     plugin.getShopManager().refreshNameTag(v);   // back to whatever the owner has equipped
@@ -156,7 +147,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 } else if (act.equals("test") && args.length > 2) {
                     int secs = fx.getRegistry().previewSeconds();
                     if (args.length > 3) { try { secs = Math.max(1, Integer.parseInt(args[3])); } catch (NumberFormatException ignored) {} }
-                    Shop s = plugin.getShopManager().getShop(v.getUniqueId());
+                    Shop s = plugin.getShopManager().getShopByEntity(v.getUniqueId());
                     String back = s == null ? "" : plugin.getShopManager().getProfile(s.getOwner()).getEquippedEffect();
                     if (fx.preview(v.getUniqueId(), args[2], secs, back)) plugin.msg().send(p, "cmd.effect.playing", "effect", args[2], "seconds", secs);
                     else plugin.msg().send(p, "cmd.effect.unknown");
@@ -262,9 +253,9 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
     /** The shop NPC you're looking at if you qualify, otherwise the only shop that qualifies. */
     private Shop resolveShop(Player p, Predicate<Shop> allowed, String what) {
         var sm = plugin.getShopManager();
-        Villager v = findLookedShopNpc(p);
+        Entity v = findLookedShopNpc(p);
         if (v != null) {
-            Shop s = sm.getShop(v.getUniqueId());
+            Shop s = sm.getShopByEntity(v.getUniqueId());
             if (s != null && allowed.test(s)) return s;
         }
         List<Shop> usable = new ArrayList<>();
@@ -379,24 +370,61 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    /** How far (blocks) /vm remove, /vm sale, /vm staff look for a shop NPC. */
+    /** How far (blocks) /vm remove, /vm sale, /vm staff look for a shop NPC. /vm link uses commands.link-range. */
     private double lookRange() { return Math.max(1, plugin.getConfig().getDouble("commands.look-range", 6.0)); }
 
-    private Villager findLookedShopNpc(Player p) {
+    private Entity findLookedShopNpc(Player p) {
         Location eye = p.getEyeLocation();
         Vector dir = eye.getDirection();
-        Villager best = null;
+        Entity best = null;
         double bestDot = plugin.getConfig().getDouble("commands.look-accuracy", 0.9);
         double r = lookRange();
         for (Entity e : p.getNearbyEntities(r, r, r)) {
-            if (!(e instanceof Villager v)
-                    || !v.getPersistentDataContainer().has(plugin.getShopManager().getShopKey(), PersistentDataType.BYTE)) continue;
-            Vector to = v.getLocation().add(0, 0.9, 0).toVector().subtract(eye.toVector());
-            if (to.lengthSquared() < 0.01) return v;
+            if (!plugin.getNpcs().isManaged(e)) continue;
+            Vector to = e.getBoundingBox().getCenter().subtract(eye.toVector());   // works for tall / wide custom models too
+            if (to.lengthSquared() < 0.01) return e;
             double dot = to.normalize().dot(dir);
-            if (dot > bestDot) { bestDot = dot; best = v; }
+            if (dot > bestDot) { bestDot = dot; best = e; }
         }
         return best;
+    }
+
+    // ------------------------------------------------------------ /vm link <shop-id>
+
+    /** Ray-traces from the admin's eyes and binds the first entity hit to the shop-id. */
+    private void linkCommand(Player p, String[] args) {
+        var m = plugin.msg();
+        var npcs = plugin.getNpcs();
+        if (args.length < 2) { m.send(p, "cmd.link.usage"); return; }
+        String id = args[1].toLowerCase(Locale.ROOT);
+        if (!NpcManager.ID.matcher(id).matches()) { m.send(p, "cmd.bad-id"); return; }
+
+        double range = Math.max(2, plugin.getConfig().getDouble("commands.link-range", 12.0));
+        RayTraceResult hit = p.getWorld().rayTrace(p.getEyeLocation(), p.getEyeLocation().getDirection(), range,
+                FluidCollisionMode.NEVER, true, 0.2,
+                e -> !e.equals(p) && !(e instanceof Display) && !(e instanceof Player));   // skip name tags and other players
+        Entity target = hit == null ? null : hit.getHitEntity();
+        if (target == null) { m.send(p, "cmd.link.nothing", "range", (int) range); return; }
+
+        NpcManager.Slot already = npcs.ofEntity(target);
+        if (already != null && already.id.equals(id)) { m.send(p, "cmd.link.same", "id", id); return; }
+        if (already != null) { m.send(p, "cmd.link.in-use", "id", already.id); return; }
+
+        NpcManager.Kind kind;
+        String ref;
+        String mythicType = npcs.mythic() == null ? null : npcs.mythic().typeOf(target);
+        String models = npcs.modelEngine() == null ? null : npcs.modelEngine().modelsOf(target);
+        if (mythicType != null) { kind = NpcManager.Kind.MYTHIC; ref = mythicType; }
+        else if (models != null) { kind = NpcManager.Kind.MODEL_ENGINE; ref = models; }
+        else { m.send(p, "cmd.link.not-custom", "type", target.getType().name()); return; }
+
+        var verdict = plugin.getProtection().checkCreate(p, target.getLocation());
+        if (!verdict.allowed()) { verdict.send(m, p); return; }
+
+        boolean existed = npcs.get(id) != null;
+        npcs.link(id, target, kind, ref);
+        m.send(p, existed ? "cmd.link.relinked" : "cmd.link.linked", "id", id, "type", ref);
+        if (kind == NpcManager.Kind.MODEL_ENGINE) m.send(p, "cmd.link.me-note");
     }
 
     @Override
@@ -431,6 +459,15 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 for (var d : plugin.getEffectManager().getRegistry().all())
                     if (d.id().startsWith(args[2].toLowerCase())) out.add(d.id());
             }
+            return out;
+        }
+        if (args.length >= 2 && plugin.access().admin(sender, args[0].toLowerCase())) {
+            String sub = args[0].toLowerCase();
+            if ((sub.equals("remove") || sub.equals("link")) && args.length == 2) {
+                for (var sl : plugin.getNpcs().all()) if (sl.id.startsWith(args[1].toLowerCase())) out.add(sl.id);
+                return out;
+            }
+            if (sub.equals("remove") && args.length == 3 && "purge".startsWith(args[2].toLowerCase())) out.add("purge");
             return out;
         }
         if (args.length != 1) return out;

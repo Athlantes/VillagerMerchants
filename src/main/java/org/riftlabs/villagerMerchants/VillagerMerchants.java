@@ -19,6 +19,7 @@ import org.riftlabs.villagerMerchants.manager.CategoryRegistry;
 import org.riftlabs.villagerMerchants.manager.EffectManager;
 import org.riftlabs.villagerMerchants.manager.LeaderboardManager;
 import org.riftlabs.villagerMerchants.manager.NametagManager;
+import org.riftlabs.villagerMerchants.manager.NpcManager;
 import org.riftlabs.villagerMerchants.manager.PromotionManager;
 import org.riftlabs.villagerMerchants.manager.ProtectionManager;
 import org.riftlabs.villagerMerchants.manager.RatingManager;
@@ -36,6 +37,7 @@ public final class VillagerMerchants extends JavaPlugin {
     private static VillagerMerchants instance;
     private DatabaseManager databaseManager;
     private ShopManager shopManager;
+    private NpcManager npcManager;
     private TransactionManager transactions;
     private RatingManager ratings;
     private TeleportManager teleports;
@@ -94,6 +96,8 @@ public final class VillagerMerchants extends JavaPlugin {
         nametagManager = new NametagManager(this);
         effectManager = new EffectManager(this);
         access.registerAll();            // after effects load, so effect.<id> nodes exist
+        npcManager = new NpcManager(this, databaseManager);
+        npcManager.initHooks();          // MythicMobs / ModelEngine (soft dependencies, optional)
         shopManager = new ShopManager(this, databaseManager);
 
         shopManager.load();
@@ -109,7 +113,10 @@ public final class VillagerMerchants extends JavaPlugin {
         prompts = new PricePromptListener(this);
         chatPrompts = new ChatPromptListener(this);
         getServer().getPluginManager().registerEvents(new GuiListener(this), this);
-        getServer().getPluginManager().registerEvents(new ShopInteractListener(this), this);
+        ShopInteractListener interact = new ShopInteractListener(this);
+        getServer().getPluginManager().registerEvents(interact, this);
+        // clicks on a ModelEngine hitbox open the shop too
+        npcManager.modelEngine().registerInteractBridge(interact::handleClick, interact::isShopNpc);
         getServer().getPluginManager().registerEvents(customerTrades, this);
         getServer().getPluginManager().registerEvents(prompts, this);
         getServer().getPluginManager().registerEvents(chatPrompts, this);
@@ -165,6 +172,7 @@ public final class VillagerMerchants extends JavaPlugin {
         messages.load();
         effectManager.reload();
         categories.load();
+        npcManager.reloadSkins();
         access.registerAll();   // picks up permissions.strict and new effect / nametag ids
         if (leaderboards != null) leaderboards.reload();
         if (papi != null) papi.reload();
@@ -191,6 +199,7 @@ public final class VillagerMerchants extends JavaPlugin {
     public Economy getEconomy() { return econ; }
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public ShopManager getShopManager() { return shopManager; }
+    public NpcManager getNpcs() { return npcManager; }
     public TransactionManager getTransactions() { return transactions; }
     public RatingManager getRatings() { return ratings; }
     public TeleportManager getTeleports() { return teleports; }

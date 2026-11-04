@@ -148,6 +148,7 @@ nametag:                   # the floating text above shop NPCs
 commands:
   look-range: 6.0          # how far /vm remove, /vm sale and /vm staff look for the shop NPC you're facing
   look-accuracy: 0.9       # 1.0 = must look dead-center, lower = more forgiving
+  link-range: 12.0         # how far /vm link <shop-id> ray-traces for the MythicMob / ModelEngine entity you look at
 
 prompts:
   timeout-seconds: 60      # chat prompts (price, search, add staff) cancel themselves after this long

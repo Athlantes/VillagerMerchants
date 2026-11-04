@@ -6,7 +6,6 @@ import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
 import org.bukkit.scheduler.BukkitTask;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.effect.EffectDefinition;
@@ -31,7 +30,7 @@ import java.util.concurrent.ThreadLocalRandom;
 public class EffectManager {
 
     private static final class Active {
-        final Villager npc;
+        final Entity npc;
         String effectId;
         long age;
         long[] next = new long[0];
@@ -40,7 +39,7 @@ public class EffectManager {
         long previewUntil;     // 0 = not previewing
         String restoreId;      // effect to return to when the preview ends
 
-        Active(Villager npc) { this.npc = npc; }
+        Active(Entity npc) { this.npc = npc; }
     }
 
     private final VillagerMerchants plugin;
@@ -79,11 +78,11 @@ public class EffectManager {
 
     /** Sets (or with a null/blank/unknown id, clears) the effect on a shop NPC. */
     public void set(UUID npcId, String effectId) {
-        Entity e = Bukkit.getEntity(npcId);
-        if (e instanceof Villager v) set(v, effectId); else active.remove(npcId);
+        Entity e = npcId == null ? null : Bukkit.getEntity(npcId);
+        if (e != null) set(e, effectId); else if (npcId != null) active.remove(npcId);
     }
 
-    public void set(Villager v, String effectId) {
+    public void set(Entity v, String effectId) {
         if (effectId == null || effectId.isBlank() || registry.get(effectId) == null) {
             active.remove(v.getUniqueId());
             return;
@@ -95,13 +94,13 @@ public class EffectManager {
         a.next = new long[0];
     }
 
-    public void clear(UUID npcId) { active.remove(npcId); }
+    public void clear(UUID npcId) { if (npcId != null) active.remove(npcId); }
 
     /** Plays an effect for a few seconds, then goes back to restoreId (may be null/blank for "nothing"). */
     public boolean preview(UUID npcId, String effectId, int seconds, String restoreId) {
         if (registry.get(effectId) == null) return false;
-        Entity e = Bukkit.getEntity(npcId);
-        if (!(e instanceof Villager v)) return false;
+        Entity v = npcId == null ? null : Bukkit.getEntity(npcId);
+        if (v == null) return false;
         Active a = active.computeIfAbsent(npcId, k -> new Active(v));
         // keep the original restore target if a preview is already running
         if (a.previewUntil == 0) a.restoreId = restoreId;
@@ -123,7 +122,7 @@ public class EffectManager {
         Iterator<Active> it = active.values().iterator();
         while (it.hasNext()) {
             Active a = it.next();
-            Villager v = a.npc;
+            Entity v = a.npc;
             if (!v.isValid()) { it.remove(); continue; }
 
             if (a.previewUntil > 0 && now >= a.previewUntil) {

@@ -600,6 +600,12 @@ custom-gui:
     name: "<red><skin> <gray>(locked)"
     lore:
       - "<gray>Not available for your rank."
+  lskin-default:
+    name: "<white>Default look"
+    lore:
+      - "<yellow>Click to restore the original look"
+  lskin-default-equipped:
+    name: "<green>Default look <gray>(equipped)"
   skin-no-access-msg: "<prefix><red>You don't have access to the <skin> skin."
   nametag-no-access: "<prefix><red>You don't have access to the <name><red> nametag."
   skin-locked:
@@ -772,13 +778,34 @@ cmd:
     - "<gold>/vm sales | purchases [page] <gray>- your transaction log"
     - "<gold>/vm rate <1-5> <gray>- rate the shop you last bought from"
   help-admin:
-    - "<gold>/vm create | remove | reload | effect | log <player> [page] <gray>(admin)"
+    - "<gold>/vm create <shop-id> <gray>- place a default villager shop (admin)"
+    - "<gold>/vm link <shop-id> <gray>- link a shop to the MythicMob / ModelEngine entity you look at (admin)"
+    - "<gold>/vm remove [shop-id] [purge] <gray>- remove a shop NPC (admin)"
+    - "<gold>/vm reload | effect | log <player> [page] <gray>(admin)"
     - "<gold>/vm suspicious [count] <gray>- recent anti-abuse flags (admin)"
     - "<gold>/vm protection <gray>- show region/claim rules and test your spot (admin)"
   reloaded: "<prefix><green>Config, language, effects and categories reloaded."
-  npc-created: "<prefix><green>Shop NPC created & saved to database!"
-  npc-removed: "<prefix><green>Shop NPC removed."
-  npc-removed-owned: "<prefix><green>Shop NPC removed (owner's items moved to /vm claim)."
+  npc-created: "<prefix><green>Shop NPC <white><id><green> created. Right-click it to rent it."
+  npc-removed: "<prefix><green>Shop NPC <white><id><green> removed."
+  npc-removed-owned: "<prefix><green>Shop NPC <white><id><green> removed (owner's items moved to /vm claim)."
+  npc-unlinked: "<prefix><green>Shop <white><id><green> removed. The linked entity was left in the world (use <white>/vm remove <id> purge<green> to delete it too)."
+  npc-unlinked-owned: "<prefix><green>Shop <white><id><green> removed (owner's items moved to /vm claim). The linked entity was left in the world."
+  bad-id: "<prefix><red>A shop-id may only use a-z, 0-9, '_' and '-' (max 32 characters)."
+  id-taken: "<prefix><red>There is already a shop called <white><id><red>. Pick another id, or use /vm link <id> to re-point it."
+  unknown-id: "<prefix><red>No shop NPC called <white><id><red>."
+  create:
+    usage: "<prefix><red>Usage: /vm create <shop-id>"
+  remove:
+    usage: "<prefix><red>Usage: /vm remove <shop-id> [purge]  (or look at the NPC)"
+  link:
+    usage: "<prefix><red>Usage: /vm link <shop-id>  <gray>(look at a MythicMob or ModelEngine entity)"
+    nothing: "<prefix><red>No entity in your line of sight (within <range> blocks)."
+    not-custom: "<prefix><red>That <white><type><red> is not a MythicMob or a ModelEngine entity."
+    in-use: "<prefix><red>That entity is already the shop <white><id><red>. /vm remove it first."
+    same: "<prefix><yellow>That entity is already linked to <white><id><yellow>."
+    linked: "<prefix><green>Shop <white><id><green> is now linked to <white><type><green>. Right-click it to rent it."
+    relinked: "<prefix><green>Shop <white><id><green> now uses <white><type><green>. Its rental, stock and sales were kept."
+    me-note: "<prefix><gray>ModelEngine entities are not re-created after a restart: make sure the base entity is persistent, or re-link it."
   look-at-npc: "<prefix><red>Look at a shop NPC (within <range> blocks)."
   unknown-subcommand: "<prefix><red>Unknown subcommand."
   unknown-player: "<prefix><red>Unknown player."

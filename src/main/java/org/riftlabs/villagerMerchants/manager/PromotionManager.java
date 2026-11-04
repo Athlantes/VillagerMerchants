@@ -132,7 +132,7 @@ public class PromotionManager {
 
         shop.startSale(percent, System.currentTimeMillis() + durationMs, listed);
         sm().saveShop(shop);
-        sm().refreshNameTag(shop.getId());
+        sm().refreshNameTag(shop);
         var m = plugin.msg();
         m.send(p, "sale.started", "percent", percent, "time", Text.duration(durationMs),
                 "fee", fee > 0 ? m.ref("sale.started-fee", "fee", Text.esc(sm().money(fee))) : Messages.parsed(""),
@@ -146,7 +146,7 @@ public class PromotionManager {
         if (!shop.isOnSale(now)) { plugin.msg().send(p, "sale.none-running"); return false; }
         shop.endSale(now);
         sm().saveShop(shop);
-        sm().refreshNameTag(shop.getId());
+        sm().refreshNameTag(shop);
         plugin.msg().send(p, "sale.stopped");
         return true;
     }
@@ -262,10 +262,10 @@ public class PromotionManager {
             if (s.getSalePercent() > 0 && !s.isOnSale(now)) {            // sale ran out
                 s.endSale(s.getSaleExpiry());
                 sm().saveShop(s);
-                sm().refreshNameTag(s.getId());
+                sm().refreshNameTag(s);
                 if (owner != null) plugin.msg().send(owner, "sale.ended");
             } else if (refreshBanners && s.isOnSale(now)) {               // keep the "(1h 20m)" fresh
-                plugin.getNametagManager().updateShopNametag(s.getId(), sm().activeNametagFormat(s));
+                plugin.getNametagManager().updateShopNametag(sm().entityIdOf(s), sm().activeNametagFormat(s));
             }
 
             if (s.getFeaturedUntil() > 0 && !s.isFeatured(now)) {        // featured time ran out

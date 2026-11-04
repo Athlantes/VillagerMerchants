@@ -157,7 +157,8 @@ public class RatingManager {
                     plugin.msg().send(op, "ratings.received", "who", raterName, "stars", stars,
                             "avg", Text.oneDecimal(a.count() == 0 ? 0 : a.sum() / a.count()), "count", a.count());
                 }
-                plugin.getShopManager().refreshNameTag(shopId);
+                Shop rated = plugin.getShopManager().getShop(shopId);
+                if (rated != null) plugin.getShopManager().refreshNameTag(rated);
             });
         });
     }

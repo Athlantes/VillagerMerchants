@@ -13,7 +13,10 @@ import java.util.concurrent.TimeUnit;
 
 public class DatabaseManager {
     public record ShopRow(String id, String owner, String location, long expiry, String trades, String stock, String prices,
-                          int salePercent, long saleExpiry, boolean saleListed, long featuredUntil, String staff) {}
+                          int salePercent, long saleExpiry, boolean saleListed, long featuredUntil, String staff,
+                          String npcId, String linkedSkin) {}
+    /** One shop NPC slot: a stable, admin-chosen id plus what is standing there (vanilla villager or a linked custom entity). */
+    public record NpcRow(String id, String kind, String location, String ref) {}
     public record ClaimRow(int id, String data) {}
     public record TxRow(long id, long ts, String shopId, String seller, String buyer, String buyerName,
                         String kind, String itemType, String itemName, int itemQty, int trades,
@@ -70,6 +73,11 @@ public class DatabaseManager {
                 + "rent_expiry TIMESTAMP, "
                 + "active_trades TEXT, "
                 + "backend_stock TEXT);";
+        String npcs = "CREATE TABLE IF NOT EXISTS shop_npcs ("
+                + "npc_id VARCHAR(32) PRIMARY KEY, "
+                + "kind VARCHAR(16) NOT NULL, "
+                + "location VARCHAR(255) NOT NULL, "
+                + "link_ref TEXT);";
         String claims = "CREATE TABLE IF NOT EXISTS claims ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "owner_uuid VARCHAR(36), "
@@ -116,6 +124,7 @@ public class DatabaseManager {
             s.execute("PRAGMA journal_mode = WAL;");
             s.execute(profiles);
             s.execute(shops);
+            s.execute(npcs);
             s.execute(claims);
             s.execute(transactions);
             s.execute(ratings);
@@ -143,7 +152,7 @@ public class DatabaseManager {
             try { s.execute("ALTER TABLE shops ADD COLUMN trade_prices TEXT"); } catch (SQLException ignored) {}
             for (String col : new String[]{
                     "sale_percent INTEGER DEFAULT 0", "sale_expiry INTEGER DEFAULT 0", "sale_listed INTEGER DEFAULT 0",
-                    "featured_until INTEGER DEFAULT 0", "staff TEXT"}) {
+                    "featured_until INTEGER DEFAULT 0", "staff TEXT", "npc_id VARCHAR(32)", "linked_skin VARCHAR(64)"}) {
                 try { s.execute("ALTER TABLE shops ADD COLUMN " + col); } catch (SQLException ignored) {}
             }
         } catch (SQLException e) {
@@ -163,18 +172,54 @@ public class DatabaseManager {
     public List<ShopRow> loadShops() {
         List<ShopRow> rows = new ArrayList<>();
         String q = "SELECT shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices, "
-                + "sale_percent, sale_expiry, sale_listed, featured_until, staff FROM shops";
+                + "sale_percent, sale_expiry, sale_listed, featured_until, staff, npc_id, linked_skin FROM shops";
         try (Connection c = getConnection(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(q)) {
             while (rs.next()) {
                 if (rs.getString(2) == null) continue;
                 rows.add(new ShopRow(rs.getString(1), rs.getString(2), rs.getString(3),
                         rs.getLong(4), rs.getString(5), rs.getString(6), rs.getString(7),
-                        rs.getInt(8), rs.getLong(9), rs.getInt(10) != 0, rs.getLong(11), rs.getString(12)));
+                        rs.getInt(8), rs.getLong(9), rs.getInt(10) != 0, rs.getLong(11), rs.getString(12),
+                        rs.getString(13), rs.getString(14)));
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to load shops: " + e.getMessage());
         }
         return rows;
+    }
+
+    // ------------------------------------------------------------ shop NPC slots
+
+    public List<NpcRow> loadNpcs() {
+        List<NpcRow> rows = new ArrayList<>();
+        try (Connection c = getConnection(); Statement s = c.createStatement();
+             ResultSet rs = s.executeQuery("SELECT npc_id, kind, location, link_ref FROM shop_npcs")) {
+            while (rs.next()) rows.add(new NpcRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)));
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to load shop NPCs: " + e.getMessage());
+        }
+        return rows;
+    }
+
+    public void upsertNpc(NpcRow r) {
+        String q = "INSERT OR REPLACE INTO shop_npcs (npc_id, kind, location, link_ref) VALUES (?, ?, ?, ?)";
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
+            ps.setString(1, r.id());
+            ps.setString(2, r.kind());
+            ps.setString(3, r.location());
+            ps.setString(4, r.ref());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to save shop NPC " + r.id() + ": " + e.getMessage());
+        }
+    }
+
+    public void deleteNpc(String id) {
+        try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement("DELETE FROM shop_npcs WHERE npc_id = ?")) {
+            ps.setString(1, id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Failed to delete shop NPC " + id + ": " + e.getMessage());
+        }
     }
 
     public Map<UUID, PlayerProfile> loadProfiles() {
@@ -244,7 +289,7 @@ public class DatabaseManager {
 
     public void upsertShop(ShopRow r) {
         String q = "INSERT OR REPLACE INTO shops (shop_id, owner_uuid, location, rent_expiry, active_trades, backend_stock, trade_prices, "
-                + "sale_percent, sale_expiry, sale_listed, featured_until, staff) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "sale_percent, sale_expiry, sale_listed, featured_until, staff, npc_id, linked_skin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
             ps.setString(1, r.id());
             ps.setString(2, r.owner());
@@ -258,6 +303,8 @@ public class DatabaseManager {
             ps.setInt(10, r.saleListed() ? 1 : 0);
             ps.setLong(11, r.featuredUntil());
             ps.setString(12, r.staff());
+            ps.setString(13, r.npcId());
+            ps.setString(14, r.linkedSkin());
             ps.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to save shop " + r.id() + ": " + e.getMessage());

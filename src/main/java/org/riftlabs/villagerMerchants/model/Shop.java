@@ -14,10 +14,12 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 public class Shop {
-    private final UUID id;          // the villager NPC's UUID
+    private final UUID id;          // stable shop id (NOT the entity UUID: entities respawn with new UUIDs)
     private final UUID owner;
     private long rentExpiry;
-    private final String location;
+    private String location;
+    private String linkedSkin = "";   // equipped variant from linked-skins.yml (shops on a MythicMob / ModelEngine body)
+    private final String npcId;     // the NPC slot (/vm create <shop-id>) this shop is rented at; null = legacy shop without a slot
     private final Map<Integer, Trade> trades = new TreeMap<>();
     /** Live inventory: shared by owner (view) and trade logic, so no desync/dupes. */
     private final Inventory storage;
@@ -34,11 +36,12 @@ public class Shop {
     // ---- featured listing
     private long featuredUntil;
 
-    public Shop(UUID id, UUID owner, long rentExpiry, String location) {
+    public Shop(UUID id, UUID owner, long rentExpiry, String location, String npcId) {
         this.id = id;
         this.owner = owner;
         this.rentExpiry = rentExpiry;
         this.location = location;
+        this.npcId = npcId;
         this.storage = Bukkit.createInventory(new StorageHolder(this), 54, org.riftlabs.villagerMerchants.VillagerMerchants.getInstance().msg().get("storage.title"));
     }
 
@@ -47,6 +50,10 @@ public class Shop {
     public long getRentExpiry() { return rentExpiry; }
     public void setRentExpiry(long v) { rentExpiry = v; dirty = true; }
     public String getLocation() { return location; }
+    public void setLocation(String loc) { if (loc != null && !loc.equals(location)) { location = loc; dirty = true; } }
+    public String getNpcId() { return npcId; }
+    public String getLinkedSkin() { return linkedSkin; }
+    public void setLinkedSkin(String v) { linkedSkin = v == null ? "" : v; dirty = true; }
     public Inventory getStorage() { return storage; }
     public Map<Integer, Trade> getTrades() { return trades; }
     public boolean isDirty() { return dirty; }

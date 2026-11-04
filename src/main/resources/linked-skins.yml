@@ -1,0 +1,34 @@
+# Looks for shops linked with /vm link (MythicMobs / ModelEngine entities).
+# Villager biome + profession skins do not apply to those, so owners pick from the variants you define here.
+# A shop with no variants simply has no Skins tab (nametags and effects still work).
+#
+# The top-level key is a shop-id (as in /vm create / /vm link), or "default" for every linked shop without its own section.
+# The original look of the entity is always available as a free "Default look" button.
+#
+# Per variant:
+#   name:       MiniMessage text shown in the menu
+#   icon:       any item material
+#   price:      0 = free
+#   permission: optional node needed to use it ("" = none)
+#   model:      ModelEngine model id swapped onto the entity (works on ModelEngine AND MythicMobs bodies)
+#   mythic:     MythicMob type the body is re-spawned as (MythicMobs bodies only)
+#   use one of model / mythic
+#
+# default:
+#   fire:
+#     name: "<red>Fire Merchant"
+#     icon: BLAZE_POWDER
+#     price: 20000
+#     model: fire_merchant
+#   frost:
+#     name: "<aqua>Frost Merchant"
+#     icon: SNOWBALL
+#     price: 20000
+#     mythic: FrostMerchant
+# spawn-market:          # only for the shop-id "spawn-market"
+#   golden:
+#     name: "<gold>Golden Merchant"
+#     icon: GOLD_INGOT
+#     price: 50000
+#     permission: "myserver.vip"
+#     model: golden_merchant

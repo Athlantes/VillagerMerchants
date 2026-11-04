@@ -17,6 +17,7 @@ import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.model.PlayerProfile;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.util.Messages;
+import org.riftlabs.villagerMerchants.util.LinkedSkins;
 import org.riftlabs.villagerMerchants.util.Skins;
 import org.riftlabs.villagerMerchants.util.Text;
 
@@ -52,6 +53,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
     private final List<EffectDefinition> allEffects = new ArrayList<>();
     private final Map<Integer, Skins.Skin> skinBySlot = new HashMap<>();
 
+    private final boolean linked;                      // shop body is a MythicMob / ModelEngine entity
+    private final List<LinkedSkins.Variant> variants = new ArrayList<>();
     private final boolean skinsEnabled;
     private final boolean tagsEnabled;
     private final boolean effectsEnabled;
@@ -66,8 +69,13 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         this.shop = shop;
 
         var access = plugin.access();
+        var slot = plugin.getNpcs().get(shop.getNpcId());
+        this.linked = slot != null && slot.linked();
+        if (linked) variants.addAll(plugin.getNpcs().linkedSkins().forShop(shop.getNpcId()));
+        // Villager biome/profession skins only exist for villager shops; linked shops get the admin-defined variants instead.
         this.skinsEnabled = plugin.getConfig().getBoolean("customization.skins-enabled", true)
-                && access.canCustomize(player, "skins");
+                && access.canCustomize(player, "skins")
+                && (!linked || !variants.isEmpty());
         this.tagsEnabled = plugin.getConfig().getBoolean("customization.nametags-enabled", true)
                 && access.canCustomize(player, "nametags");
 
@@ -129,7 +137,9 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                     currentTab == Tab.EFFECTS ? "custom-gui.tab-effects-active" : "custom-gui.tab-effects"));
         }
 
-        if (currentTab == Tab.SKINS && skinsEnabled) {
+        if (currentTab == Tab.SKINS && skinsEnabled && linked) {
+            renderVariants(sm, p);
+        } else if (currentTab == Tab.SKINS && skinsEnabled) {
             // Biome and Outfit description items have been removed here.
             for (Map.Entry<Integer, Skins.Skin> entry : skinBySlot.entrySet()) {
                 inv.setItem(entry.getKey(), renderSkinItem(sm, p, entry.getValue()));
@@ -188,6 +198,73 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         fillEmptySlots();
     }
 
+    // ------------------------------------------------------------ linked-shop variants (linked-skins.yml)
+
+    private boolean canUseVariant(LinkedSkins.Variant v) {
+        return v.permission() == null || v.permission().isBlank() || player.hasPermission(v.permission());
+    }
+
+    private void renderVariants(ShopManager sm, PlayerProfile p) {
+        var m = plugin.msg();
+        boolean none = shop.getLinkedSkin().isEmpty();
+        inv.setItem(45, none
+                ? Text.glow(m.icon(Material.ARMOR_STAND, "custom-gui.lskin-default-equipped"))
+                : m.icon(Material.ARMOR_STAND, "custom-gui.lskin-default"));
+        for (int i = 0; i < variants.size() && i < CONTENT_SLOTS.length; i++) {
+            LinkedSkins.Variant v = variants.get(i);
+            Messages.Parsed name = Messages.parsed(v.name());
+            String price = sm.money(v.price());
+            ItemStack it;
+            if (v.id().equals(shop.getLinkedSkin())) {
+                it = Text.glow(m.icon(v.icon(), "custom-gui.skin-equipped", "skin", name));
+            } else if (!canUseVariant(v)) {
+                it = m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", name);
+            } else if (v.price() <= 0 || p.ownsSkin(v.key())) {
+                it = m.icon(v.icon(), "custom-gui.skin-owned", "skin", name);
+            } else if (v.id().equals(confirming)) {
+                it = Text.glow(m.icon(v.icon(), "custom-gui.skin-confirm", "skin", name, "price", price));
+            } else {
+                it = m.icon(v.icon(), "custom-gui.skin-locked", "skin", name, "price", price);
+            }
+            inv.setItem(CONTENT_SLOTS[i], it);
+        }
+    }
+
+    private void equipVariant(LinkedSkins.Variant v) {
+        shop.setLinkedSkin(v == null ? "" : v.id());
+        plugin.getShopManager().saveShop(shop);
+        var slot = plugin.getNpcs().get(shop.getNpcId());
+        if (slot != null) plugin.getNpcs().applySkin(slot, v);
+    }
+
+    private void handleVariantClick(int slot) {
+        if (slot == 45) { if (!shop.getLinkedSkin().isEmpty()) equipVariant(null); confirming = null; render(); return; }
+        int idx = -1;
+        for (int i = 0; i < CONTENT_SLOTS.length; i++) if (CONTENT_SLOTS[i] == slot) { idx = i; break; }
+        if (idx < 0 || idx >= variants.size()) return;
+        LinkedSkins.Variant v = variants.get(idx);
+        ShopManager sm = plugin.getShopManager();
+        PlayerProfile p = sm.getProfile(player.getUniqueId());
+
+        if (v.id().equals(shop.getLinkedSkin())) return;
+        if (!canUseVariant(v)) { plugin.msg().send(player, "custom-gui.skin-no-access-msg", "skin", Messages.parsed(v.name())); return; }
+        if (v.price() <= 0 || p.ownsSkin(v.key())) {
+            equipVariant(v);
+            confirming = null;
+        } else if (v.id().equals(confirming)) {
+            if (sm.charge(player, v.price())) {
+                p.unlockSkin(v.key());
+                sm.saveProfile(p);
+                equipVariant(v);
+                plugin.msg().send(player, "custom-gui.purchased", "name", Messages.parsed(v.name()));
+            }
+            confirming = null;
+        } else {
+            confirming = v.id();
+        }
+        render();
+    }
+
     private void renderPagination(int maxPages) {
         if (page > 0) {
             inv.setItem(48, Gui.previousPage(plugin, page, maxPages));
@@ -243,7 +320,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
     private void equipEffect(PlayerProfile p, String id) {
         p.setEquippedEffect(id);
-        plugin.getEffectManager().set(shop.getId(), id);
+        plugin.getEffectManager().set(plugin.getShopManager().entityIdOf(shop), id);
         plugin.getDatabaseManager().async(() ->
                 plugin.getDatabaseManager().updateEffectData(player.getUniqueId().toString(),
                         p.getUnlockedEffectsString(), p.getEquippedEffect()));
@@ -268,7 +345,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
         if (e.isRightClick()) {
             int secs = plugin.getEffectManager().getRegistry().previewSeconds();
-            if (plugin.getEffectManager().preview(shop.getId(), def.id(), secs, p.getEquippedEffect())) {
+            if (plugin.getEffectManager().preview(plugin.getShopManager().entityIdOf(shop), def.id(), secs, p.getEquippedEffect())) {
                 plugin.msg().send(player, "custom-gui.effect-previewing", "effect", Messages.parsed(def.name()), "seconds", secs);
                 Bukkit.getScheduler().runTask(plugin, () -> player.closeInventory());
             }
@@ -366,7 +443,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                     return;
                 } else if (p.ownsNametag(data.id())) {
                     p.setEquippedNametagFormat(data.format());
-                    plugin.getNametagManager().updateShopNametag(shop.getId(), data.format());
+                    plugin.getNametagManager().updateShopNametag(plugin.getShopManager().entityIdOf(shop), data.format());
                     plugin.getDatabaseManager().async(() ->
                             plugin.getDatabaseManager().updateNametagData(player.getUniqueId().toString(), p.getUnlockedNametagsString(), p.getEquippedNametagFormat())
                     );
@@ -377,7 +454,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                         plugin.getEconomy().withdrawPlayer(player, data.price());
                         p.unlockNametag(data.id());
                         p.setEquippedNametagFormat(data.format());
-                        plugin.getNametagManager().updateShopNametag(shop.getId(), data.format());
+                        plugin.getNametagManager().updateShopNametag(plugin.getShopManager().entityIdOf(shop), data.format());
                         plugin.getDatabaseManager().async(() ->
                                 plugin.getDatabaseManager().updateNametagData(player.getUniqueId().toString(), p.getUnlockedNametagsString(), p.getEquippedNametagFormat())
                         );
@@ -392,6 +469,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                     render();
                 }
             }
+        } else if (currentTab == Tab.SKINS && skinsEnabled && linked) {
+            handleVariantClick(slot);
         } else if (currentTab == Tab.SKINS && skinsEnabled) {
             Skins.Skin clickedSkin = skinBySlot.get(slot);
             if (clickedSkin == null) return;

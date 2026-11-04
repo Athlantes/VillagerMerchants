@@ -5,7 +5,7 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
-import org.bukkit.entity.Villager;
+import org.bukkit.entity.Entity;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Transformation;
 import org.joml.AxisAngle4f;
@@ -30,8 +30,7 @@ public class NametagManager {
         startAnimationTask();
     }
 
-    public void spawnNametag(Villager npc, String format) {
-        npc.setCustomNameVisible(false);
+    public void spawnNametag(Entity npc, String format) {
 
         TextDisplay display = (TextDisplay) npc.getWorld().spawnEntity(npc.getLocation(), EntityType.TEXT_DISPLAY);
         display.getPersistentDataContainer().set(nametagKey, PersistentDataType.BYTE, (byte) 1);

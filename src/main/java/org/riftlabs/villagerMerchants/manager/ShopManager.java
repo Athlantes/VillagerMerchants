@@ -35,7 +35,8 @@ public class ShopManager {
     private final VillagerMerchants plugin;
     private final DatabaseManager db;
     private final NamespacedKey shopKey;
-    private final Map<UUID, Shop> shops = new HashMap<>();
+    private final Map<UUID, Shop> shops = new HashMap<>();      // by stable shop id
+    private final Map<String, Shop> byNpc = new HashMap<>();    // by NPC slot id (the /vm create <shop-id> name)
     private final Map<UUID, PlayerProfile> profiles = new HashMap<>();
     private final Set<UUID> claiming = new HashSet<>();
 
@@ -54,11 +55,18 @@ public class ShopManager {
             recomputeSlots(pp);
             saveProfile(pp);
         }
+        NpcManager npcs = plugin.getNpcs();
+        npcs.load();
         for (DatabaseManager.ShopRow r : db.loadShops()) {
             try {
-                // Ensure legacy shops that were deleted from DB don't spawn
                 UUID shopId = UUID.fromString(r.id());
-                Shop s = new Shop(shopId, UUID.fromString(r.owner()), r.expiry(), r.location());
+                String npcId = r.npcId();
+                boolean migrated = false;
+                if (npcId == null || npcId.isBlank()) {           // shop saved by an older version: give it a slot
+                    npcId = npcs.adoptLegacy(shopId, r.location());
+                    migrated = npcId != null;
+                }
+                Shop s = new Shop(shopId, UUID.fromString(r.owner()), r.expiry(), r.location(), npcId);
 
                 ItemStack[] arr = ItemCodec.decode(r.trades());
                 for (int i = 0; i + 2 < arr.length; i += 3) {
@@ -80,113 +88,25 @@ public class ShopManager {
                 s.startSale(r.salePercent(), r.saleExpiry(), r.saleListed());
                 s.setFeaturedUntil(r.featuredUntil());
                 s.loadStaff(r.staff());
-                s.setDirty(false);
+                if (r.linkedSkin() != null) s.setLinkedSkin(r.linkedSkin());
+                s.setDirty(migrated);
 
-                shops.put(s.getId(), s);
-
-                // Spawn the NPC dynamically at the saved location
-                spawnDynamicNpc(s);
-
+                register(s);
             } catch (Exception ex) {
                 plugin.getLogger().severe("Skipping corrupt shop row " + r.id() + ": " + ex.getMessage());
             }
         }
-        plugin.getLogger().info("Loaded " + shops.size() + " rented shops and dynamically spawned their NPCs.");
+        npcs.spawnAll();
+        plugin.getLogger().info("Loaded " + shops.size() + " rented shops on " + npcs.all().size() + " shop NPCs.");
     }
 
-    /** Shops whose world was not loaded when the plugin started, by world name. */
-    private final Map<String, List<Shop>> pendingWorlds = new HashMap<>();
-
-    /** Called when a world loads: spawns the NPCs of shops that were waiting for it. */
-    public void onWorldLoad(World world) {
-        List<Shop> waiting = pendingWorlds.remove(world.getName());
-        if (waiting == null) return;
-        for (Shop s : waiting) {
-            if (shops.get(s.getId()) == s) spawnDynamicNpc(s);   // skip shops removed in the meantime
-        }
+    private void register(Shop s) {
+        shops.put(s.getId(), s);
+        if (s.getNpcId() != null) byNpc.put(s.getNpcId(), s);
     }
 
-    private void spawnDynamicNpc(Shop shop) {
-        String locStr = shop.getLocation();
-        if (locStr == null || locStr.equals("unknown")) return;
-
-        String[] parts = locStr.split(";");
-        if (parts.length < 4) return;
-
-        World world = Bukkit.getWorld(parts[0]);
-        if (world == null) {
-            // e.g. a Multiverse world that loads after this plugin: spawn the NPC when the world appears
-            pendingWorlds.computeIfAbsent(parts[0], k -> new ArrayList<>()).add(shop);
-            plugin.getLogger().warning("World '" + parts[0] + "' is not loaded yet; the shop NPC at "
-                    + locStr + " will spawn when it loads.");
-            return;
-        }
-
-        try {
-            double x = Double.parseDouble(parts[1]);
-            double y = Double.parseDouble(parts[2]);
-            double z = Double.parseDouble(parts[3]);
-            float yaw = parts.length > 4 ? Float.parseFloat(parts[4]) : 0f;
-            float pitch = parts.length > 5 ? Float.parseFloat(parts[5]) : 0f;
-
-            Location loc = new Location(world, x, y, z, yaw, pitch);
-
-            // Delete any accidental vanilla duplicates floating at this spot
-            for (Entity e : world.getNearbyEntities(loc, 1, 1, 1)) {
-                if (e instanceof Villager v && v.getPersistentDataContainer().has(shopKey, PersistentDataType.BYTE)) {
-                    v.remove();
-                }
-            }
-
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                Villager npc = (Villager) world.spawnEntity(loc, EntityType.VILLAGER);
-                npc.setAdult();
-                npc.setAgeLock(true);
-                npc.setAI(false);
-                npc.setInvulnerable(true);
-                npc.setCollidable(false);
-                npc.setSilent(true);
-
-                // CRITICAL: Prevent vanilla saving. Let the plugin handle it.
-                npc.setPersistent(false);
-                npc.setRemoveWhenFarAway(false);
-                npc.setCanPickupItems(false);
-
-                npc.getPersistentDataContainer().set(shopKey, PersistentDataType.BYTE, (byte) 1);
-
-                // Overwrite the Shop's UUID with the newly spawned Villager's UUID
-                UUID oldId = shop.getId();
-                shops.remove(oldId);
-
-                Shop updatedShop = new Shop(npc.getUniqueId(), shop.getOwner(), shop.getRentExpiry(), shop.getLocation());
-                updatedShop.getStorage().setContents(shop.getStorage().getContents());
-                updatedShop.copyExtrasFrom(shop);
-                for (Map.Entry<Integer, Trade> entry : shop.getTrades().entrySet()) {
-                    updatedShop.setTrade(entry.getKey(), entry.getValue());
-                }
-                shops.put(npc.getUniqueId(), updatedShop);
-
-                // Update database asynchronously with the new physical entity ID
-                db.async(() -> {
-                    db.deleteShop(oldId.toString());
-                    saveShop(updatedShop);
-                });
-
-                refreshNameTag(npc);
-            });
-        } catch (NumberFormatException ignored) {}
-    }
-
-    public void despawnAll() {
-        for (World world : Bukkit.getWorlds()) {
-            for (Villager v : world.getEntitiesByClass(Villager.class)) {
-                if (v.getPersistentDataContainer().has(shopKey, PersistentDataType.BYTE)) {
-                    plugin.getNametagManager().removeNametag(v.getUniqueId());
-                    v.remove();
-                }
-            }
-        }
-    }
+    /** Removes every vanilla shop villager from the world (they are re-created on start); linked bodies are left alone. */
+    public void despawnAll() { plugin.getNpcs().shutdown(); }
 
     public void startTasks() {
         long auto = Math.max(5, cfg().getLong("autosave-seconds", 30)) * 20L;
@@ -208,7 +128,7 @@ public class ShopManager {
         return new DatabaseManager.ShopRow(s.getId().toString(), s.getOwner().toString(), s.getLocation(),
                 s.getRentExpiry(), ItemCodec.encode(arr), ItemCodec.encode(s.getStorage().getContents()),
                 encodePrices(map), s.getSalePercent(), s.getSaleExpiry(), s.isSaleListed(), s.getFeaturedUntil(),
-                s.serializeStaff());
+                s.serializeStaff(), s.getNpcId(), s.getLinkedSkin());
     }
 
     private static String encodePrices(Map<Integer, Trade> trades) {
@@ -258,7 +178,21 @@ public class ShopManager {
         db.async(() -> db.upsertProfile(u, slots, tax, days, skins, st, sp, sLvl));
     }
 
-    public Shop getShop(UUID npc) { return shops.get(npc); }
+    /** By stable shop id (what ratings, transactions and sessions use). */
+    public Shop getShop(UUID shopId) { return shops.get(shopId); }
+    /** The shop rented at a NPC slot, or null if that slot is free. */
+    public Shop shopOfNpc(String npcId) { return npcId == null ? null : byNpc.get(npcId); }
+    /** The shop of the NPC body with this entity UUID, or null (free slot or not a shop NPC). */
+    public Shop getShopByEntity(UUID entity) {
+        NpcManager.Slot slot = plugin.getNpcs().ofEntity(entity);
+        return slot == null ? null : byNpc.get(slot.id);
+    }
+    /** The live NPC body of a shop, or null while its chunk is unloaded. */
+    public Entity entityOf(Shop s) { return plugin.getNpcs().entity(s.getNpcId()); }
+    public UUID entityIdOf(Shop s) {
+        NpcManager.Slot slot = plugin.getNpcs().get(s.getNpcId());
+        return slot == null ? null : slot.entity;
+    }
     public Collection<Shop> allShops() { return Collections.unmodifiableCollection(shops.values()); }
     public boolean isLive(Shop s) { return shops.get(s.getId()) == s; }
 
@@ -293,20 +227,23 @@ public class ShopManager {
                 : plugin.msg().str("money.fallback", "amount", String.format(Locale.ROOT, "%.2f", amount));
     }
 
-    public void refreshNameTag(Villager v) {
-        Shop s = shops.get(v.getUniqueId());
-        v.customName(null);
-        v.setCustomNameVisible(false);
+    public void refreshNameTag(Entity v) {
+        Shop s = getShopByEntity(v.getUniqueId());
+        boolean vanilla = plugin.getNpcs().isVanilla(v);   // linked bodies keep their own name and look
+        if (vanilla) {
+            v.customName(null);
+            v.setCustomNameVisible(false);
+        }
 
         plugin.getNametagManager().removeNametag(v.getUniqueId());
         plugin.getEffectManager().clear(v.getUniqueId());
 
         if (s == null) {
-            Skins.apply(v, "plains", "none");
+            if (vanilla && v instanceof Villager vil) Skins.apply(vil, "plains", "none");
             plugin.getNametagManager().spawnNametag(v, plugin.msg().raw("nametag.available"));
         } else {
             PlayerProfile pr = getProfile(s.getOwner());
-            Skins.apply(v, pr.getSkinType(), pr.getSkinProfession());
+            if (vanilla && v instanceof Villager vil) Skins.apply(vil, pr.getSkinType(), pr.getSkinProfession());
 
             if (s.isActive(System.currentTimeMillis())) {
                 plugin.getNametagManager().spawnNametag(v, activeNametagFormat(s));
@@ -334,9 +271,15 @@ public class ShopManager {
         return plugin.getPromotions() == null ? own : plugin.getPromotions().effectFor(s, own);
     }
 
-    public void refreshNameTag(UUID npc) {
-        Entity e = Bukkit.getEntity(npc);
-        if (e instanceof Villager v) refreshNameTag(v);
+    /** By entity UUID. */
+    public void refreshNameTag(UUID npcEntity) {
+        Entity e = npcEntity == null ? null : Bukkit.getEntity(npcEntity);
+        if (e != null && plugin.getNpcs().isManaged(e)) refreshNameTag(e);
+    }
+
+    public void refreshNameTag(Shop shop) {
+        Entity e = entityOf(shop);
+        if (e != null) refreshNameTag(e);
     }
 
     public double rentPrice(PlayerProfile p) {
@@ -346,7 +289,7 @@ public class ShopManager {
     }
 
     public boolean rentShop(Player p, UUID npcId) {
-        if (shops.containsKey(npcId)) {
+        if (getShopByEntity(npcId) != null) {
             plugin.msg().send(p, "shop.rent.taken");
             return false;
         }
@@ -366,25 +309,18 @@ public class ShopManager {
             verdict.send(plugin.msg(), p);
             return false;
         }
+        NpcManager.Slot slot = plugin.getNpcs().ofEntity(npcId);
+        if (slot == null) return false;   // the NPC was removed while the menu was open
         PlayerProfile prof = getProfile(p.getUniqueId());
         double price = rentPrice(prof);
         if (!charge(p, price)) return false;
 
         int days = Math.min(cfg().getInt("rent.base-days", 7), prof.getMaxRentDays());
 
-        Entity ent = Bukkit.getEntity(npcId);
-        String loc = ent == null ? "unknown" :
-                ent.getWorld().getName() + ";" +
-                        ent.getLocation().getX() + ";" +
-                        ent.getLocation().getY() + ";" +
-                        ent.getLocation().getZ() + ";" +
-                        ent.getLocation().getYaw() + ";" +
-                        ent.getLocation().getPitch();
-
-        Shop s = new Shop(npcId, p.getUniqueId(), System.currentTimeMillis() + days * DAY, loc);
-        shops.put(npcId, s);
+        Shop s = new Shop(UUID.randomUUID(), p.getUniqueId(), System.currentTimeMillis() + days * DAY, slot.location, slot.id);
+        register(s);
         saveShop(s);
-        refreshNameTag(npcId);
+        refreshNameTag(s);
         plugin.msg().send(p, "shop.rent.success", "days", days);
         return true;
     }
@@ -408,7 +344,7 @@ public class ShopManager {
         if (!charge(p, price)) return false;
         shop.setRentExpiry(base + ext);
         saveShop(shop);
-        refreshNameTag(shop.getId());
+        refreshNameTag(shop);
         plugin.msg().send(p, "shop.rent.extended", "days", ext / DAY);
         return true;
     }
@@ -439,6 +375,7 @@ public class ShopManager {
 
     public void releaseShop(Shop shop, boolean keepItems, boolean notify) {
         if (shops.remove(shop.getId()) == null) return;
+        if (shop.getNpcId() != null) byNpc.remove(shop.getNpcId(), shop);
         for (HumanEntity v : new ArrayList<>(shop.getStorage().getViewers())) v.closeInventory();
         plugin.getCustomerTrades().closeSessions(shop.getId());
 
@@ -454,7 +391,8 @@ public class ShopManager {
         shop.getStorage().clear();
         String id = shop.getId().toString();
         db.async(() -> db.deleteShop(id));
-        refreshNameTag(shop.getId());
+        Entity body = entityOf(shop);
+        if (body != null) refreshNameTag(body);
 
         Player op = Bukkit.getPlayer(shop.getOwner());
         if (notify && op != null) plugin.msg().send(op, "shop.released");
@@ -568,7 +506,7 @@ public class ShopManager {
         }
         if (s.kind() == Skins.Kind.TYPE) p.setSkinType(s.key()); else p.setSkinProfession(s.key());
         saveProfile(p);
-        for (Shop sh : shops.values()) if (sh.isOwner(pl.getUniqueId())) refreshNameTag(sh.getId());
+        for (Shop sh : shops.values()) if (sh.isOwner(pl.getUniqueId())) refreshNameTag(sh);
     }
 
     public boolean buySkin(Player pl, Skins.Skin s) {

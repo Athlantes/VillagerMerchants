@@ -6,7 +6,6 @@ import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
-import org.bukkit.persistence.PersistentDataType;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 
 import java.util.HashMap;
@@ -21,8 +20,8 @@ public class NpcLookTask implements Runnable {
     public NpcLookTask(VillagerMerchants plugin) { this.plugin = plugin; }
 
     private boolean isShopNpc(Entity e) {
-        return e instanceof Villager v
-                && v.getPersistentDataContainer().has(plugin.getShopManager().getShopKey(), PersistentDataType.BYTE);
+        // only villagers this plugin spawned: linked MythicMobs / ModelEngine bodies run their own animations
+        return e instanceof Villager && plugin.getNpcs().isVanilla(e);
     }
 
     @Override
