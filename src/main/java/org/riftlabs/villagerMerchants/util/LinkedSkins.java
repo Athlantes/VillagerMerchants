@@ -20,7 +20,7 @@ public final class LinkedSkins {
      * @param mythic MythicMob type the body is re-spawned as (MythicMobs bodies only), or null
      */
     public record Variant(String group, String id, String name, Material icon, double price, String permission,
-                          String model, String mythic, boolean isDefault) {
+                          String model, String mythic, boolean isDefault, List<String> lockedLore) {
         /** True if this variant is what a body of this type / model id looks like (its own look, so it is always free). */
         public boolean matches(String ref) {
             if (ref == null) return false;
@@ -57,7 +57,7 @@ public final class LinkedSkins {
             out.add(new Variant(group, id.toLowerCase(Locale.ROOT), v.getString("name", id),
                     icon == null || icon.isAir() ? Material.PLAYER_HEAD : icon,
                     Math.max(0, v.getDouble("price", 0)), v.getString("permission", ""), model, mythic,
-                    v.getBoolean("default", false)));
+                    v.getBoolean("default", false), Lore.read(v, "locked-lore")));
         }
         return out;
     }

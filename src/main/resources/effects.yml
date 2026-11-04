@@ -13,6 +13,7 @@
 #      icon: BLAZE_POWDER                       # any item
 #      price: 5000.0                            # 0 = free for everyone
 #      permission: ""                           # optional: players need this node to buy/equip
+#      locked-lore: "<gray>Walk 10,000 blocks"   # optional: shown while a player lacks the permission (one line or a list)
 #      enabled: true                            # false hides it without deleting it
 #      description: ["Line one", "Line two"]    # shown in the lore (gray)
 #      layers:

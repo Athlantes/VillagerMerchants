@@ -30,7 +30,7 @@ import java.util.Map;
 
 public class CustomizationGui implements GuiHolder, ShopBound {
     private enum Tab { SKINS, NAMETAGS, EFFECTS }
-    private record NametagPreset(String id, String format, String name, double price, String permission) {}
+    private record NametagPreset(String id, String format, String name, double price, String permission, List<String> lockedLore) {}
 
     // Fixed layout slots for Skins tab
     private static final int[] TYPE_SLOTS = {10, 11, 12, 13, 14, 15, 16};
@@ -114,7 +114,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             String format = cfg.getString(key + ".format", plugin.msg().raw("nametag.fallback-format"));
             double price = cfg.getDouble(key + ".price", 0.0);
             String permission = cfg.getString(key + ".permission", "");
-            allNametags.add(new NametagPreset(key, format, name, price, permission));
+            allNametags.add(new NametagPreset(key, format, name, price, permission,
+                    org.riftlabs.villagerMerchants.util.Lore.read(cfg, key + ".locked-lore")));
         }
     }
 
@@ -176,7 +177,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                     lore.add(m.line("custom-gui.status.equipped"));
                     it = Text.glow(it);
                 } else if (!plugin.access().canUseNametag(player, data.id(), data.permission())) {
-                    lore.add(m.line("custom-gui.status.locked"));
+                    if (data.lockedLore().isEmpty()) lore.add(m.line("custom-gui.status.locked"));
+                    else for (String l : data.lockedLore()) lore.add(Text.item(l));
                 } else if (p.ownsNametag(data.id())) {
                     lore.add(m.line("custom-gui.status.click-equip"));
                 } else if (data.id().equals(confirming)) {
@@ -200,6 +202,17 @@ public class CustomizationGui implements GuiHolder, ShopBound {
     }
 
     // ------------------------------------------------------------ linked-shop variants (linked-skins.yml)
+
+    /** Locked items: the admin's own "how to unlock this" lines replace the default lore. Unchanged when none are set. */
+    private ItemStack withLockedLore(ItemStack it, List<String> lines) {
+        if (lines == null || lines.isEmpty()) return it;
+        ItemMeta meta = it.getItemMeta();
+        List<Component> lore = new ArrayList<>();
+        for (String l : lines) lore.add(Text.item(l));
+        meta.lore(lore);
+        it.setItemMeta(meta);
+        return it;
+    }
 
     private boolean canUseVariant(LinkedSkins.Variant v) {
         return v.permission() == null || v.permission().isBlank() || player.hasPermission(v.permission());
@@ -233,7 +246,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             if (cur != null && v.id().equals(cur.id())) {
                 it = Text.glow(m.icon(v.icon(), "custom-gui.skin-equipped", "skin", name));
             } else if (!canUseVariant(v)) {
-                it = m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", name);
+                it = withLockedLore(m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", name), v.lockedLore());
             } else if (own || v.price() <= 0 || p.ownsSkin(v.key())) {
                 it = m.icon(v.icon(), "custom-gui.skin-owned", "skin", name);
             } else if (v.id().equals(confirming)) {
@@ -318,7 +331,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
 
             boolean owned = def.price() <= 0 || p.ownsEffect(def.id());
             if (!plugin.access().canUseEffect(player, def)) {
-                lore.add(m.line("custom-gui.status.locked"));
+                if (def.lockedLore().isEmpty()) lore.add(m.line("custom-gui.status.locked"));
+                else for (String l : def.lockedLore()) lore.add(Text.item(l));
             } else if (def.id().equals(p.getEquippedEffect())) {
                 lore.add(m.line("custom-gui.status.equipped"));
                 meta.setEnchantmentGlintOverride(true);
@@ -404,7 +418,8 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         if (sm.isEquipped(p, s)) {
             return Text.glow(m.icon(s.icon(), "custom-gui.skin-equipped", "skin", s.name()));
         } else if (!plugin.access().canUseSkin(player, s)) {
-            return m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", s.name());
+            return withLockedLore(m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", s.name()),
+                    org.riftlabs.villagerMerchants.util.Lore.read(plugin.getConfig(), "skins.locked-lore." + s.key()));
         } else if (sm.owns(p, s)) {
             return m.icon(s.icon(), "custom-gui.skin-owned", "skin", s.name());
         } else if (s.id().equals(confirming)) {

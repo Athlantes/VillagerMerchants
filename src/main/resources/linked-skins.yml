@@ -23,6 +23,8 @@
 #   icon:       any item material
 #   price:      0 = free
 #   permission: optional node needed to use it ("" = none)
+#   locked-lore: optional. Shown while a player lacks the permission, so they know how to earn it.
+#               One MiniMessage line or a list. Your own system (quests, ranks...) gives the permission.
 #   model:      ModelEngine model id swapped onto the entity (works on ModelEngine AND MythicMobs bodies)
 #   mythic:     MythicMob type the body is re-spawned as (MythicMobs bodies only)
 #   default:    true = what /vm mm create <id> / /vm meg create <id> (no type) spawns; otherwise the first variant
@@ -51,4 +53,6 @@
 #     icon: GOLD_INGOT
 #     price: 50000
 #     permission: "myserver.vip"
+#     locked-lore:
+#       - "<gray>Unlocked by walking <white>10,000 blocks"
 #     model: golden_merchant

@@ -106,6 +106,12 @@ skins:                     # permanent unlocks
   # permissions:
   #   librarian: "villagermerchants.vip"
   #   jungle: "myserver.rank.donor"
+  # Text shown on a locked skin instead of "Not available for your rank" (one line or a list, MiniMessage), so players know how to unlock it:
+  # locked-lore:
+  #   librarian: "<gray>Reach <gold>VIP rank"
+  #   jungle:
+  #     - "<gray>Walk <white>10,000 blocks"
+  #     - "<gray>to unlock this skin"
   # Optional price for one specific skin (overrides type-price / profession-price):
   # prices:
   #   jungle: 20000.0

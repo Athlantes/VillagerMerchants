@@ -67,7 +67,8 @@ public final class EffectRegistry {
 
             effects.put(id, new EffectDefinition(id, e.getString("name", id), icon,
                     Math.max(0, e.getDouble("price", 0.0)), e.getString("permission", ""),
-                    e.getStringList("description"), List.copyOf(layers)));
+                    e.getStringList("description"), List.copyOf(layers),
+                    org.riftlabs.villagerMerchants.util.Lore.read(e, "locked-lore")));
         }
         plugin.getLogger().info("Loaded " + effects.size() + " shop effects.");
     }

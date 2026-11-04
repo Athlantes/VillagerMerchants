@@ -5,12 +5,18 @@
 #   permission:  optional. Players need this node to buy/equip the preset. Leave it out to use the default rule:
 #                open to everybody, or villagermerchants.nametag.<id> when customization.require-permission.nametags is on.
 #
+#   locked-lore: optional. Shown instead of "Locked (missing permission)" while a player lacks the permission, so they
+#                know how to earn it. One line or a list of MiniMessage lines. Your own system gives the permission.
+#
 # Example:
 #   golden_market:
 #     name: "Golden Market"
 #     format: "<gold><bold>Premium Market</bold></gold>"
 #     price: 5000.0
 #     permission: "villagermerchants.vip"
+#     locked-lore:
+#       - "<gray>Unlocked by reaching <gold>Rank VIP"
+#       - "<gray>Buy it at <white>store.example.com"
 classic_green:
   name: "Classic Green"
   format: "<green><bold>Available Shop</bold></green>"
