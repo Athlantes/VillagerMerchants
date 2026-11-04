@@ -11,7 +11,7 @@ commands:
   vm:
     description: VillagerMerchants main command
     aliases: [villagermerchants]
-    usage: /vm <claim|sales|purchases|rate|sale|staff|create|link|remove|reload|suspicious|protection>
+    usage: /vm <claim|sales|purchases|rate|sale|staff|create|mm|meg|remove|reload|suspicious|protection>
   shops:
     description: Browse open shops and teleport to them
     usage: /shops [search <item> | category <name> | sale | top [earners|rated|visited] [daily|weekly]]
@@ -50,7 +50,8 @@ permissions:
     default: op
     children:
       villagermerchants.admin.create: true
-      villagermerchants.admin.link: true
+      villagermerchants.admin.mm: true
+      villagermerchants.admin.meg: true
       villagermerchants.admin.remove: true
       villagermerchants.admin.reload: true
       villagermerchants.admin.effect: true
@@ -60,8 +61,11 @@ permissions:
   villagermerchants.admin.create:
     description: /vm create <shop-id> - place a vanilla villager shop NPC
     default: op
-  villagermerchants.admin.link:
-    description: /vm link <shop-id> - bind a shop to the MythicMob / ModelEngine entity you are looking at
+  villagermerchants.admin.mm:
+    description: /vm mm create|link|remove - shops on MythicMobs
+    default: op
+  villagermerchants.admin.meg:
+    description: /vm meg create|link|remove - shops on ModelEngine models
     default: op
   villagermerchants.admin.remove:
     description: /vm remove [shop-id] - delete a shop NPC

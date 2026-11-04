@@ -20,7 +20,12 @@ public final class LinkedSkins {
      * @param mythic MythicMob type the body is re-spawned as (MythicMobs bodies only), or null
      */
     public record Variant(String group, String id, String name, Material icon, double price, String permission,
-                          String model, String mythic) {
+                          String model, String mythic, boolean isDefault) {
+        /** True if this variant is what a body of this type / model id looks like (its own look, so it is always free). */
+        public boolean matches(String ref) {
+            if (ref == null) return false;
+            return (mythic != null && mythic.equalsIgnoreCase(ref)) || (model != null && model.equalsIgnoreCase(ref));
+        }
         /** Id stored in the player's unlocked list. */
         public String key() { return "linked:" + group + ":" + id; }
     }
@@ -51,9 +56,31 @@ public final class LinkedSkins {
             Material icon = Material.matchMaterial(v.getString("icon", "PLAYER_HEAD"));
             out.add(new Variant(group, id.toLowerCase(Locale.ROOT), v.getString("name", id),
                     icon == null || icon.isAir() ? Material.PLAYER_HEAD : icon,
-                    Math.max(0, v.getDouble("price", 0)), v.getString("permission", ""), model, mythic));
+                    Math.max(0, v.getDouble("price", 0)), v.getString("permission", ""), model, mythic,
+                    v.getBoolean("default", false)));
         }
         return out;
+    }
+
+    /** The variant a body of this type / model id already is, so it can show as "equipped". Null if it is not in the list. */
+    public Variant matching(String shopId, String ref) {
+        for (Variant v : forShop(shopId)) if (v.matches(ref)) return v;
+        return null;
+    }
+
+    /** What /vm mm create spawns without a type: the variant marked "default: true", else the first MythicMob variant. */
+    public Variant defaultMythic(String shopId) { return pickDefault(shopId, true); }
+    /** What /vm meg create spawns without a model id. */
+    public Variant defaultModel(String shopId) { return pickDefault(shopId, false); }
+
+    private Variant pickDefault(String shopId, boolean mythic) {
+        Variant first = null;
+        for (Variant v : forShop(shopId)) {
+            if ((mythic ? v.mythic() : v.model()) == null) continue;
+            if (v.isDefault()) return v;
+            if (first == null) first = v;
+        }
+        return first;
     }
 
     public Variant find(String shopId, String variantId) {

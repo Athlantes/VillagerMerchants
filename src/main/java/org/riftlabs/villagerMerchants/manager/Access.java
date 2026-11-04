@@ -47,7 +47,7 @@ public final class Access {
             "customize.skins", "customize.nametags", "customize.effects");
 
     /** Sub-actions of /vm that need villagermerchants.admin or villagermerchants.admin.<action>. */
-    public static final List<String> ADMIN_ACTIONS = List.of("create", "link", "remove", "reload", "effect", "log", "suspicious", "protection");
+    public static final List<String> ADMIN_ACTIONS = List.of("create", "mm", "meg", "remove", "reload", "effect", "log", "suspicious", "protection");
 
     private final VillagerMerchants plugin;
 

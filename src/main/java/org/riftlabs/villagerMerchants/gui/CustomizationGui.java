@@ -17,6 +17,7 @@ import org.riftlabs.villagerMerchants.manager.ShopManager;
 import org.riftlabs.villagerMerchants.model.PlayerProfile;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.util.Messages;
+import org.riftlabs.villagerMerchants.manager.NpcManager;
 import org.riftlabs.villagerMerchants.util.LinkedSkins;
 import org.riftlabs.villagerMerchants.util.Skins;
 import org.riftlabs.villagerMerchants.util.Text;
@@ -204,22 +205,36 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         return v.permission() == null || v.permission().isBlank() || player.hasPermission(v.permission());
     }
 
+    private NpcManager.Slot slotOf() { return plugin.getNpcs().get(shop.getNpcId()); }
+
+    /** The variant the body wears right now: the equipped one, else the one matching what it was created as. */
+    private LinkedSkins.Variant current() {
+        var slot = slotOf();
+        return slot == null ? null : plugin.getNpcs().currentVariant(slot);
+    }
+
     private void renderVariants(ShopManager sm, PlayerProfile p) {
         var m = plugin.msg();
-        boolean none = shop.getLinkedSkin().isEmpty();
-        inv.setItem(45, none
-                ? Text.glow(m.icon(Material.ARMOR_STAND, "custom-gui.lskin-default-equipped"))
-                : m.icon(Material.ARMOR_STAND, "custom-gui.lskin-default"));
+        var slot = slotOf();
+        LinkedSkins.Variant base = slot == null ? null : plugin.getNpcs().baseVariant(slot);
+        LinkedSkins.Variant cur = current();
+        // The body's own look is a normal entry when linked-skins.yml lists it; otherwise it gets a "Default look" button.
+        if (base == null) {
+            inv.setItem(45, cur == null
+                    ? Text.glow(m.icon(Material.ARMOR_STAND, "custom-gui.lskin-default-equipped"))
+                    : m.icon(Material.ARMOR_STAND, "custom-gui.lskin-default"));
+        }
         for (int i = 0; i < variants.size() && i < CONTENT_SLOTS.length; i++) {
             LinkedSkins.Variant v = variants.get(i);
             Messages.Parsed name = Messages.parsed(v.name());
             String price = sm.money(v.price());
+            boolean own = v == base || (base != null && v.id().equals(base.id()));
             ItemStack it;
-            if (v.id().equals(shop.getLinkedSkin())) {
+            if (cur != null && v.id().equals(cur.id())) {
                 it = Text.glow(m.icon(v.icon(), "custom-gui.skin-equipped", "skin", name));
             } else if (!canUseVariant(v)) {
                 it = m.icon(Material.BARRIER, "custom-gui.skin-no-access", "skin", name);
-            } else if (v.price() <= 0 || p.ownsSkin(v.key())) {
+            } else if (own || v.price() <= 0 || p.ownsSkin(v.key())) {
                 it = m.icon(v.icon(), "custom-gui.skin-owned", "skin", name);
             } else if (v.id().equals(confirming)) {
                 it = Text.glow(m.icon(v.icon(), "custom-gui.skin-confirm", "skin", name, "price", price));
@@ -230,15 +245,21 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         }
     }
 
+    /** null = the body's original look (stored as "", so a look that is not in the list can still be restored). */
     private void equipVariant(LinkedSkins.Variant v) {
-        shop.setLinkedSkin(v == null ? "" : v.id());
+        var slot = slotOf();
+        LinkedSkins.Variant base = slot == null ? null : plugin.getNpcs().baseVariant(slot);
+        boolean original = v == null || (base != null && v.id().equals(base.id()));
+        shop.setLinkedSkin(original ? "" : v.id());
         plugin.getShopManager().saveShop(shop);
-        var slot = plugin.getNpcs().get(shop.getNpcId());
-        if (slot != null) plugin.getNpcs().applySkin(slot, v);
+        if (slot != null) plugin.getNpcs().applySkin(slot, original ? null : v);
     }
 
     private void handleVariantClick(int slot) {
-        if (slot == 45) { if (!shop.getLinkedSkin().isEmpty()) equipVariant(null); confirming = null; render(); return; }
+        var npc = slotOf();
+        LinkedSkins.Variant base = npc == null ? null : plugin.getNpcs().baseVariant(npc);
+        LinkedSkins.Variant cur = current();
+        if (slot == 45 && base == null) { if (cur != null) equipVariant(null); confirming = null; render(); return; }
         int idx = -1;
         for (int i = 0; i < CONTENT_SLOTS.length; i++) if (CONTENT_SLOTS[i] == slot) { idx = i; break; }
         if (idx < 0 || idx >= variants.size()) return;
@@ -246,9 +267,10 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         ShopManager sm = plugin.getShopManager();
         PlayerProfile p = sm.getProfile(player.getUniqueId());
 
-        if (v.id().equals(shop.getLinkedSkin())) return;
+        if (cur != null && v.id().equals(cur.id())) return;
         if (!canUseVariant(v)) { plugin.msg().send(player, "custom-gui.skin-no-access-msg", "skin", Messages.parsed(v.name())); return; }
-        if (v.price() <= 0 || p.ownsSkin(v.key())) {
+        boolean own = base != null && v.id().equals(base.id());
+        if (own || v.price() <= 0 || p.ownsSkin(v.key())) {
             equipVariant(v);
             confirming = null;
         } else if (v.id().equals(confirming)) {

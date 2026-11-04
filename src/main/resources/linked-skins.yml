@@ -1,9 +1,22 @@
-# Looks for shops linked with /vm link (MythicMobs / ModelEngine entities).
+# Looks for shops on MythicMobs / ModelEngine entities.
 # Villager biome + profession skins do not apply to those, so owners pick from the variants you define here.
 # A shop with no variants simply has no Skins tab (nametags and effects still work).
 #
-# The top-level key is a shop-id (as in /vm create / /vm link), or "default" for every linked shop without its own section.
-# The original look of the entity is always available as a free "Default look" button.
+# HOW SHOPS ARE CREATED (admin commands)
+#   /vm mm  create <shop-id> [mob-type]   spawn a MythicMob as a shop. No type = the default variant below.
+#   /vm mm  link   <shop-id>              turn the MythicMob you are looking at into a shop
+#   /vm mm  remove <shop-id>              delete the shop and its MythicMob
+#   /vm meg create <shop-id> [model-id]   put a ModelEngine model on a base entity and make it a shop
+#   /vm meg link   <shop-id>              turn the ModelEngine entity you are looking at into a shop
+#   /vm meg remove <shop-id>              delete the shop and its entity
+#   (/vm create <shop-id> still makes the plain villager shop; /vm remove [shop-id] removes any shop.)
+#
+# HOW THIS FILE IS USED
+# The top-level key is a shop-id (the one you gave to /vm mm|meg create|link), or "default" for every
+# linked shop without its own section.
+# The look a shop was created with shows as "equipped" and is always free, if it is listed here.
+# A shop whose original look is not listed gets an extra "Default look" button instead.
+# When the rent ends the shop goes back to its original look. Run /vm reload after editing.
 #
 # Per variant:
 #   name:       MiniMessage text shown in the menu
@@ -12,19 +25,26 @@
 #   permission: optional node needed to use it ("" = none)
 #   model:      ModelEngine model id swapped onto the entity (works on ModelEngine AND MythicMobs bodies)
 #   mythic:     MythicMob type the body is re-spawned as (MythicMobs bodies only)
+#   default:    true = what /vm mm create <id> / /vm meg create <id> (no type) spawns; otherwise the first variant
 #   use one of model / mythic
 #
 # default:
+#   villager:
+#     name: "Villager Merchant"
+#     icon: EMERALD
+#     price: 0
+#     default: true
+#     mythic: fantasy_npc_seller
+#   farmer:
+#     name: "<yellow>Farmer Merchant"
+#     icon: WHEAT
+#     price: 20000
+#     mythic: fantasy_npc_farmer
 #   fire:
 #     name: "<red>Fire Merchant"
 #     icon: BLAZE_POWDER
 #     price: 20000
 #     model: fire_merchant
-#   frost:
-#     name: "<aqua>Frost Merchant"
-#     icon: SNOWBALL
-#     price: 20000
-#     mythic: FrostMerchant
 # spawn-market:          # only for the shop-id "spawn-market"
 #   golden:
 #     name: "<gold>Golden Merchant"

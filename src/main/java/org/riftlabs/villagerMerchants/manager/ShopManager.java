@@ -391,6 +391,7 @@ public class ShopManager {
         shop.getStorage().clear();
         String id = shop.getId().toString();
         db.async(() -> db.deleteShop(id));
+        plugin.getNpcs().resetLook(shop.getNpcId());   // bought looks leave with the owner
         Entity body = entityOf(shop);
         if (body != null) refreshNameTag(body);
 

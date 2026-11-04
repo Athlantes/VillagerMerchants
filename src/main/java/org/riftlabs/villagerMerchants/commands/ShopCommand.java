@@ -103,9 +103,9 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 plugin.getNpcs().createVanilla(id, loc);
                 plugin.msg().send(p, "cmd.npc-created", "id", id);
             }
-            case "link" -> {
+            case "mm", "meg" -> {
                 if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
-                linkCommand(p, args);
+                customCommand(p, args);
             }
             case "remove" -> {
                 boolean purge = args.length > 1 && args[args.length - 1].equalsIgnoreCase("purge");
@@ -370,7 +370,7 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    /** How far (blocks) /vm remove, /vm sale, /vm staff look for a shop NPC. /vm link uses commands.link-range. */
+    /** How far (blocks) /vm remove, /vm sale, /vm staff look for a shop NPC. /vm mm|meg link uses commands.link-range. */
     private double lookRange() { return Math.max(1, plugin.getConfig().getDouble("commands.look-range", 6.0)); }
 
     private Entity findLookedShopNpc(Player p) {
@@ -389,14 +389,61 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         return best;
     }
 
-    // ------------------------------------------------------------ /vm link <shop-id>
+    // ------------------------------------------------------------ /vm mm|meg <create|link|remove> <shop-id> [type]
 
-    /** Ray-traces from the admin's eyes and binds the first entity hit to the shop-id. */
-    private void linkCommand(Player p, String[] args) {
+    /**
+     * /vm mm create <id> [mob-type]   spawn a MythicMob (default: the default variant of linked-skins.yml) as a shop
+     * /vm mm link   <id>              turn the MythicMob you are looking at into a shop
+     * /vm mm remove <id>              delete the shop and its MythicMob
+     * /vm meg ...                     the same for ModelEngine models (create takes a model id)
+     */
+    private void customCommand(Player p, String[] args) {
         var m = plugin.msg();
         var npcs = plugin.getNpcs();
-        if (args.length < 2) { m.send(p, "cmd.link.usage"); return; }
-        String id = args[1].toLowerCase(Locale.ROOT);
+        boolean mm = args[0].equalsIgnoreCase("mm");
+        String root = mm ? "mm" : "meg";
+        NpcManager.Kind kind = mm ? NpcManager.Kind.MYTHIC : NpcManager.Kind.MODEL_ENGINE;
+        if (args.length < 3) { m.send(p, "cmd.custom.usage", "cmd", root); return; }
+        String action = args[1].toLowerCase(Locale.ROOT);
+        String id = args[2].toLowerCase(Locale.ROOT);
+        boolean hooked = mm ? npcs.mythic() != null && npcs.mythic().available()
+                            : npcs.modelEngine() != null && npcs.modelEngine().available();
+        if (!hooked) { m.send(p, mm ? "cmd.custom.no-mythic" : "cmd.custom.no-modelengine"); return; }
+
+        switch (action) {
+            case "create" -> {
+                if (!NpcManager.ID.matcher(id).matches()) { m.send(p, "cmd.bad-id"); return; }
+                if (npcs.get(id) != null) { m.send(p, "cmd.id-taken", "id", id); return; }
+                String ref = args.length > 3 ? args[3] : null;
+                if (ref == null) {   // no type given: the default look from linked-skins.yml
+                    var def = mm ? npcs.linkedSkins().defaultMythic(id) : npcs.linkedSkins().defaultModel(id);
+                    ref = def == null ? null : (mm ? def.mythic() : def.model());
+                }
+                if (ref == null) { m.send(p, "cmd.custom.need-type", "cmd", root); return; }
+                if (!mm && !npcs.modelEngine().modelExists(ref)) { m.send(p, "cmd.custom.spawn-failed", "type", ref); return; }
+                var verdict = plugin.getProtection().checkCreate(p, p.getLocation());
+                if (!verdict.allowed()) { verdict.send(m, p); return; }
+                if (npcs.createCustom(id, kind, ref, p.getLocation()) == null) { m.send(p, "cmd.custom.spawn-failed", "type", ref); return; }
+                m.send(p, "cmd.custom.created", "id", id, "type", ref);
+            }
+            case "link" -> linkLooked(p, id, kind);
+            case "remove" -> {
+                var slot = npcs.get(id);
+                if (slot == null) { m.send(p, "cmd.unknown-id", "id", id); return; }
+                if (slot.kind != kind) { m.send(p, "cmd.custom.wrong-kind", "id", id, "cmd", slot.kind == NpcManager.Kind.MYTHIC ? "mm" : slot.kind == NpcManager.Kind.MODEL_ENGINE ? "meg" : ""); return; }
+                Shop s = plugin.getShopManager().shopOfNpc(slot.id);
+                if (s != null) plugin.getShopManager().releaseShop(s, true);   // owner's items go to /vm claim
+                npcs.remove(slot, true);
+                m.send(p, s != null ? "cmd.npc-removed-owned" : "cmd.npc-removed", "id", slot.id);
+            }
+            default -> m.send(p, "cmd.custom.usage", "cmd", root);
+        }
+    }
+
+    /** Ray-traces from the admin's eyes and binds the first entity hit, if it is of the wanted kind. */
+    private void linkLooked(Player p, String id, NpcManager.Kind want) {
+        var m = plugin.msg();
+        var npcs = plugin.getNpcs();
         if (!NpcManager.ID.matcher(id).matches()) { m.send(p, "cmd.bad-id"); return; }
 
         double range = Math.max(2, plugin.getConfig().getDouble("commands.link-range", 12.0));
@@ -410,21 +457,18 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         if (already != null && already.id.equals(id)) { m.send(p, "cmd.link.same", "id", id); return; }
         if (already != null) { m.send(p, "cmd.link.in-use", "id", already.id); return; }
 
-        NpcManager.Kind kind;
-        String ref;
-        String mythicType = npcs.mythic() == null ? null : npcs.mythic().typeOf(target);
-        String models = npcs.modelEngine() == null ? null : npcs.modelEngine().modelsOf(target);
-        if (mythicType != null) { kind = NpcManager.Kind.MYTHIC; ref = mythicType; }
-        else if (models != null) { kind = NpcManager.Kind.MODEL_ENGINE; ref = models; }
-        else { m.send(p, "cmd.link.not-custom", "type", target.getType().name()); return; }
+        String ref = want == NpcManager.Kind.MYTHIC
+                ? (npcs.mythic() == null ? null : npcs.mythic().typeOf(target))
+                : (npcs.modelEngine() == null ? null : npcs.modelEngine().modelsOf(target));
+        if (ref == null) { m.send(p, "cmd.link.not-custom", "type", target.getType().name()); return; }
 
         var verdict = plugin.getProtection().checkCreate(p, target.getLocation());
         if (!verdict.allowed()) { verdict.send(m, p); return; }
 
         boolean existed = npcs.get(id) != null;
-        npcs.link(id, target, kind, ref);
+        npcs.link(id, target, want, ref);
         m.send(p, existed ? "cmd.link.relinked" : "cmd.link.linked", "id", id, "type", ref);
-        if (kind == NpcManager.Kind.MODEL_ENGINE) m.send(p, "cmd.link.me-note");
+        if (want == NpcManager.Kind.MODEL_ENGINE) m.send(p, "cmd.link.me-note");
     }
 
     @Override
@@ -463,7 +507,14 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length >= 2 && plugin.access().admin(sender, args[0].toLowerCase())) {
             String sub = args[0].toLowerCase();
-            if ((sub.equals("remove") || sub.equals("link")) && args.length == 2) {
+            if ((sub.equals("mm") || sub.equals("meg"))) {
+                if (args.length == 2) { for (String a2 : List.of("create", "link", "remove")) if (a2.startsWith(args[1].toLowerCase())) out.add(a2); }
+                else if (args.length == 3 && !args[1].equalsIgnoreCase("create")) {
+                    for (var sl : plugin.getNpcs().all()) if (sl.id.startsWith(args[2].toLowerCase())) out.add(sl.id);
+                }
+                return out;
+            }
+            if (sub.equals("remove") && args.length == 2) {
                 for (var sl : plugin.getNpcs().all()) if (sl.id.startsWith(args[1].toLowerCase())) out.add(sl.id);
                 return out;
             }

@@ -140,7 +140,13 @@ npc:
   look-update-ticks: 4
 
 nametag:                   # the floating text above shop NPCs
-  height: 0.3              # blocks above the default position
+  height: 0.3              # villager shops: blocks above the default position
+  use-model-bone: true     # ModelEngine models with a bone named "nametag": draw the tag there (falls back to linked-height)
+  linked-height: 2.4       # shops on a MythicMob / ModelEngine body: blocks above the entity's feet (match your model's height)
+  # per-model / per-shop override: key = shop-id, MythicMob type or ModelEngine model id
+  # linked-heights:
+  #   seller: 2.3
+  #   giant_merchant: 5.0
   shadowed: true
   see-through: false
   animation-ticks: 4       # [restart] update speed of animated tags (<anim_rainbow>)
@@ -148,7 +154,7 @@ nametag:                   # the floating text above shop NPCs
 commands:
   look-range: 6.0          # how far /vm remove, /vm sale and /vm staff look for the shop NPC you're facing
   look-accuracy: 0.9       # 1.0 = must look dead-center, lower = more forgiving
-  link-range: 12.0         # how far /vm link <shop-id> ray-traces for the MythicMob / ModelEngine entity you look at
+  link-range: 12.0         # how far /vm mm|meg link <shop-id> ray-traces for the MythicMob / ModelEngine entity you look at
 
 prompts:
   timeout-seconds: 60      # chat prompts (price, search, add staff) cancel themselves after this long
@@ -427,3 +433,6 @@ gui:
     directory-sale: GOLDEN_CARROT
     directory-info: PAPER
     directory-empty: COBWEB
+
+modelengine:
+  base-entity: VILLAGER    # entity type /vm meg create puts the model on (AI off, invulnerable, hidden by the model)

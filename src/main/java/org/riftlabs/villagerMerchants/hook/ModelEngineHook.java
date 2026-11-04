@@ -69,6 +69,98 @@ public final class ModelEngineHook {
         return null;
     }
 
+    /** False only if ModelEngine says this model id does not exist (true when it cannot tell). */
+    public boolean modelExists(String id) {
+        if (!ready) return false;
+        try {
+            Object bp = Class.forName(API).getMethod("getBlueprint", String.class).invoke(null, id);
+            return bp != null;
+        } catch (NoSuchMethodException e) {
+            return true;
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** Turns a plain entity into a ModelEngine entity wearing these comma separated model ids, hiding the base entity. */
+    public boolean applyNewModels(Entity base, String modelIds) {
+        if (!ready || modelIds == null || modelIds.isBlank()) return false;
+        try {
+            Class<?> api = Class.forName(API);
+            Object me = api.getMethod("createModeledEntity", Entity.class).invoke(null, base);
+            Method create = api.getMethod("createActiveModel", String.class);
+            for (String id : modelIds.split(",")) {
+                if (id.isBlank()) continue;
+                Object model = create.invoke(null, id.trim());
+                for (Method add : me.getClass().getMethods()) {
+                    if (add.getName().equals("addModel") && add.getParameterCount() == 2) { add.invoke(me, model, true); break; }
+                }
+            }
+            Method hide = find(me, "setBaseEntityVisible", 1);
+            if (hide != null) hide.invoke(me, false);
+            return true;
+        } catch (Throwable t) {
+            plugin.getLogger().warning("Could not put ModelEngine model '" + modelIds + "' on an entity: " + t);
+            return false;
+        }
+    }
+
+    private static final String[] BEHAVIOR_TYPES = {
+            "com.ticxo.modelengine.api.model.bone.behavior.BoneBehaviorTypes",
+            "com.ticxo.modelengine.api.model.bone.type.BoneBehaviorTypes",
+            "com.ticxo.modelengine.api.model.bone.BoneBehaviorTypes"};
+
+    private static Method find(Object target, String name, int params) {
+        for (Method m : target.getClass().getMethods()) {
+            if (m.getName().equals(name) && m.getParameterCount() == params) { try { m.setAccessible(true); } catch (Throwable ignored) { } return m; }
+        }
+        return null;
+    }
+
+    /**
+     * Shows {@code text} on the model's own "nametag" bone (ModelEngine's NAMETAG bone behavior), so the tag sits
+     * exactly where the modeler put it. Returns false when the model has no such bone or the API is not what we
+     * expect; the caller then falls back to a floating text display.
+     * {@code text == null} hides the bone's tag.
+     */
+    public boolean setNametag(Entity e, net.kyori.adventure.text.Component text) {
+        if (!ready) return false;
+        Object me = modeled(e);
+        if (me == null) return false;
+        try {
+            Object type = null;
+            for (String cn : BEHAVIOR_TYPES) {
+                try { type = Class.forName(cn).getField("NAMETAG").get(null); break; } catch (Throwable ignored) { /* next */ }
+            }
+            if (type == null) return false;
+            Object models = me.getClass().getMethod("getModels").invoke(me);
+            if (!(models instanceof Map<?, ?> m)) return false;
+            boolean done = false;
+            for (Object model : m.values()) {
+                Method getBone = find(model, "getBone", 1);
+                if (getBone == null) continue;
+                Object bone = getBone.invoke(model, "nametag");
+                if (bone instanceof java.util.Optional<?> o) bone = o.orElse(null);
+                if (bone == null) continue;
+                Method getBehavior = find(bone, "getBoneBehavior", 1);
+                if (getBehavior == null) continue;
+                Object behavior = getBehavior.invoke(bone, type);
+                if (behavior instanceof java.util.Optional<?> o) behavior = o.orElse(null);
+                if (behavior == null) continue;
+                Method setVisible = find(behavior, "setVisible", 1);
+                Method setComponent = find(behavior, "setComponent", 1);
+                if (setComponent == null) continue;
+                if (text != null) setComponent.invoke(behavior, text);
+                if (setVisible != null) setVisible.invoke(behavior, text != null);
+                done = true;
+            }
+            return done;
+        } catch (Throwable t) {
+            plugin.getLogger().fine("ModelEngine nametag bone: " + t);
+            return false;
+        }
+    }
+
     /**
      * Replaces the models on this entity with the given comma separated model ids.
      * Does nothing (returns false) if the entity is not modeled or the API differs from what we expect.

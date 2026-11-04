@@ -779,7 +779,8 @@ cmd:
     - "<gold>/vm rate <1-5> <gray>- rate the shop you last bought from"
   help-admin:
     - "<gold>/vm create <shop-id> <gray>- place a default villager shop (admin)"
-    - "<gold>/vm link <shop-id> <gray>- link a shop to the MythicMob / ModelEngine entity you look at (admin)"
+    - "<gold>/vm mm create|link|remove <shop-id> [mob-type] <gray>- MythicMobs shops (admin)"
+    - "<gold>/vm meg create|link|remove <shop-id> [model-id] <gray>- ModelEngine shops (admin)"
     - "<gold>/vm remove [shop-id] [purge] <gray>- remove a shop NPC (admin)"
     - "<gold>/vm reload | effect | log <player> [page] <gray>(admin)"
     - "<gold>/vm suspicious [count] <gray>- recent anti-abuse flags (admin)"
@@ -797,8 +798,15 @@ cmd:
     usage: "<prefix><red>Usage: /vm create <shop-id>"
   remove:
     usage: "<prefix><red>Usage: /vm remove <shop-id> [purge]  (or look at the NPC)"
+  custom:
+    usage: "<prefix><red>Usage: /vm <cmd> create <shop-id> [type]  |  /vm <cmd> link <shop-id> <gray>(look at it)<red>  |  /vm <cmd> remove <shop-id>"
+    no-mythic: "<prefix><red>MythicMobs is not running on this server."
+    no-modelengine: "<prefix><red>ModelEngine is not running on this server."
+    need-type: "<prefix><red>No type given and linked-skins.yml has no default look. Use /vm <cmd> create <shop-id> <type>."
+    spawn-failed: "<prefix><red>Could not create <white><type><red>. Check the name and the server log."
+    created: "<prefix><green>Shop <white><id><green> created as <white><type><green>. Right-click it to rent it."
+    wrong-kind: "<prefix><red>Shop <white><id><red> is a different kind of shop. Use /vm remove <id> for any shop."
   link:
-    usage: "<prefix><red>Usage: /vm link <shop-id>  <gray>(look at a MythicMob or ModelEngine entity)"
     nothing: "<prefix><red>No entity in your line of sight (within <range> blocks)."
     not-custom: "<prefix><red>That <white><type><red> is not a MythicMob or a ModelEngine entity."
     in-use: "<prefix><red>That entity is already the shop <white><id><red>. /vm remove it first."

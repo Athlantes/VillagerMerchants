@@ -164,6 +164,32 @@ public class NpcManager {
         return s;
     }
 
+    /** Base entity for a model this plugin spawns: an invisible-model carrier that stays put. */
+    private Entity spawnModelBase(Location loc) {
+        EntityType type;
+        try { type = EntityType.valueOf(plugin.getConfig().getString("modelengine.base-entity", "VILLAGER").toUpperCase(Locale.ROOT)); }
+        catch (IllegalArgumentException e) { type = EntityType.VILLAGER; }
+        Entity e = loc.getWorld().spawnEntity(loc, type);
+        if (e instanceof org.bukkit.entity.LivingEntity le) { le.setAI(false); le.setSilent(true); le.setCollidable(false); le.setRemoveWhenFarAway(false); }
+        e.setInvulnerable(true);
+        e.setPersistent(true);
+        return e;
+    }
+
+    private Entity spawnModelBody(Location loc, String models) {
+        if (modelEngine == null || !modelEngine.available()) return null;
+        Entity base = spawnModelBase(loc);
+        if (!modelEngine.applyNewModels(base, models)) { base.remove(); return null; }
+        return base;
+    }
+
+    /** /vm mm create, /vm meg create: spawns a MythicMob of this type, or a ModelEngine model, as a new shop NPC. Null if the spawn failed. */
+    public Slot createCustom(String id, Kind kind, String ref, Location at) {
+        Entity body = kind == Kind.MYTHIC ? (mythic == null ? null : mythic.spawn(ref, at)) : spawnModelBody(at, ref);
+        if (body == null) return null;
+        return link(id, body, kind, ref);
+    }
+
     /**
      * Points a slot at an existing MythicMob / ModelEngine entity. A new id creates the slot; an existing id is
      * re-pointed and keeps its rental, stock and sales.
@@ -209,6 +235,21 @@ public class NpcManager {
         else e.setInvulnerable(false);
     }
 
+    /**
+     * Height (blocks above the entity's feet) of the floating name tag for a linked body, or -1 for a vanilla villager.
+     * Lookup order in config.yml: nametag.linked-heights.<shop-id>, then .<mob type / first model id>, then nametag.linked-height.
+     */
+    public double nametagHeight(Entity e) {
+        Slot s = ofEntity(e);
+        if (s == null || !s.linked()) return -1;
+        var cfg = plugin.getConfig();
+        String base = "nametag.linked-heights.";
+        if (cfg.contains(base + s.id)) return cfg.getDouble(base + s.id);
+        String ref = s.ref == null ? "" : s.ref.split(",")[0].trim();
+        if (!ref.isEmpty() && cfg.contains(base + ref)) return cfg.getDouble(base + ref);
+        return cfg.getDouble("nametag.linked-height", 2.4);
+    }
+
     // ------------------------------------------------------------ linked skins
 
     private LinkedSkins.Variant equipped(Slot s) {
@@ -220,6 +261,26 @@ public class NpcManager {
     private String effectiveMythic(Slot s) {
         var v = equipped(s);
         return v != null && v.mythic() != null ? v.mythic() : s.ref;
+    }
+
+    private String effectiveModels(Slot s) {
+        var v = equipped(s);
+        return v != null && v.model() != null ? v.model() : s.ref;
+    }
+
+    /** What the body currently looks like in linked-skins.yml terms: the equipped variant, else the one matching its original type. */
+    public LinkedSkins.Variant currentVariant(Slot s) {
+        var v = equipped(s);
+        return v != null ? v : baseVariant(s);
+    }
+
+    /** The variant that is the body's own look (what it was created / linked as), or null if linked-skins.yml does not list it. */
+    public LinkedSkins.Variant baseVariant(Slot s) { return linkedSkins.matching(s.id, s.ref); }
+
+    /** The shop ended (rent over / removed): the body goes back to the look it was created with. */
+    public void resetLook(String npcId) {
+        Slot s = get(npcId);
+        if (s != null && s.kind != Kind.VANILLA) applySkin(s, null);
     }
 
     private void reapplySkin(Slot s) {
@@ -308,7 +369,10 @@ public class NpcManager {
                 if (e != null) bind(s, e);
                 else plugin.getLogger().warning("Shop '" + s.id + "': MythicMob '" + s.ref + "' could not be spawned (is MythicMobs running and the mob defined?).");
             }
-            case MODEL_ENGINE -> { /* the entity comes back with its chunk; re-link with /vm link if it is gone for good */ }
+            case MODEL_ENGINE -> {   // a persistent base entity returns with its chunk; if it is gone, rebuild it from the model ids
+                Entity e = spawnModelBody(loc, effectiveModels(s));
+                if (e != null) bind(s, e);
+            }
         }
     }
 
