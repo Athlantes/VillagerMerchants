@@ -96,7 +96,8 @@ public class ShopManager {
                 plugin.getLogger().severe("Skipping corrupt shop row " + r.id() + ": " + ex.getMessage());
             }
         }
-        npcs.spawnAll();
+        // one tick later: MythicMobs / ModelEngine have finished enabling by then
+        Bukkit.getScheduler().runTask(plugin, npcs::spawnAll);
         plugin.getLogger().info("Loaded " + shops.size() + " rented shops on " + npcs.all().size() + " shop NPCs.");
     }
 

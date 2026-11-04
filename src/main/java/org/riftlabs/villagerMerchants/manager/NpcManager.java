@@ -40,6 +40,8 @@ public class NpcManager {
         public String location;   // world;x;y;z;yaw;pitch
         public String ref;        // MYTHIC: mob type, MODEL_ENGINE: model ids, VANILLA: null
         public UUID entity;       // current body, null while its chunk is unloaded
+        public boolean expectsModel;   // the body wears a ModelEngine model (so a body without one is broken)
+        int retries;                   // failed (re)spawn attempts since the last good body
         String world; int cx, cz;
 
         Slot(String id, Kind kind, String location, String ref) {
@@ -126,13 +128,13 @@ public class NpcManager {
 
     public void load() {
         for (NpcRow r : db.loadNpcs()) {
-            try { slots.put(r.id(), new Slot(r.id(), Kind.parse(r.kind()), r.location(), r.ref())); }
+            try { { Slot sl = new Slot(r.id(), Kind.parse(r.kind()), r.location(), r.ref()); sl.expectsModel = r.models(); slots.put(r.id(), sl); } }
             catch (Exception ex) { plugin.getLogger().severe("Skipping corrupt shop NPC '" + r.id() + "': " + ex.getMessage()); }
         }
     }
 
     private void save(Slot s) {
-        NpcRow row = new NpcRow(s.id, s.kind.name(), s.location, s.ref);
+        NpcRow row = new NpcRow(s.id, s.kind.name(), s.location, s.ref, s.expectsModel);
         db.async(() -> db.upsertNpc(row));
     }
 
@@ -207,6 +209,7 @@ public class NpcManager {
             var shop = plugin.getShopManager().shopOfNpc(id);
             if (shop != null) shop.setLocation(s.location);
         }
+        s.expectsModel = kind == Kind.MODEL_ENGINE || (modelEngine != null && modelEngine.available() && modelEngine.modelsOf(target) != null);
         save(s);
         if (kind == Kind.MODEL_ENGINE) target.setPersistent(true);   // so the model's base entity survives restarts
         bind(s, target);
@@ -330,7 +333,10 @@ public class NpcManager {
         return npc;
     }
 
-    private void bind(Slot s, Entity e) {
+    private void bind(Slot s, Entity e) { bind(s, e, 0); }
+
+    private void bind(Slot s, Entity e, int attempt) {
+        s.retries = 0;
         if (s.entity != null && !s.entity.equals(e.getUniqueId())) byEntity.remove(s.entity);
         s.entity = e.getUniqueId();
         byEntity.put(s.entity, s);
@@ -339,7 +345,10 @@ public class NpcManager {
         pdc.set(idKey, PersistentDataType.STRING, s.id);
         if (s.linked()) e.setInvulnerable(true);
         plugin.getShopManager().refreshNameTag(e);
-        if (s.kind != Kind.VANILLA) Bukkit.getScheduler().runTask(plugin, () -> reapplySkin(s));   // the model may only be there a tick later
+        if (s.kind != Kind.VANILLA) {
+            Bukkit.getScheduler().runTask(plugin, () -> reapplySkin(s));   // the model may only be there a tick later
+            verifyLater(s, attempt);
+        }
     }
 
     /** Makes sure the slot has a live body if its chunk is loaded. */
@@ -367,13 +376,66 @@ public class NpcManager {
             case MYTHIC -> {
                 Entity e = mythic != null ? mythic.spawn(effectiveMythic(s), loc) : null;
                 if (e != null) bind(s, e);
-                else plugin.getLogger().warning("Shop '" + s.id + "': MythicMob '" + s.ref + "' could not be spawned (is MythicMobs running and the mob defined?).");
+                else retrySync(s, "MythicMob '" + effectiveMythic(s) + "' could not be spawned (is MythicMobs running and the mob defined?)");
             }
             case MODEL_ENGINE -> {   // a persistent base entity returns with its chunk; if it is gone, rebuild it from the model ids
                 Entity e = spawnModelBody(loc, effectiveModels(s));
                 if (e != null) bind(s, e);
+                else retrySync(s, "ModelEngine model '" + effectiveModels(s) + "' could not be applied (are the models loaded?)");
             }
         }
+    }
+
+    // ------------------------------------------------------------ keeping bodies healthy
+
+    private static final long[] VERIFY_DELAYS = {40L, 200L, 600L, 1200L};
+
+    /** MythicMobs and ModelEngine finish loading after us (ModelEngine imports models asynchronously), so a body can come back "empty". */
+    private boolean bodyLooksRight(Slot s, Entity e) {
+        if (s.kind == Kind.MYTHIC) {
+            if (mythic == null || !mythic.available()) return true;       // cannot judge
+            if (mythic.typeOf(e) == null) return false;                   // a leftover entity MythicMobs no longer owns
+            return !(s.expectsModel && modelEngine != null && modelEngine.available() && modelEngine.modelsOf(e) == null);
+        }
+        if (s.kind == Kind.MODEL_ENGINE) return modelEngine == null || !modelEngine.available() || modelEngine.modelsOf(e) != null;
+        return true;
+    }
+
+    private void verifyLater(Slot s, int attempt) {
+        if (attempt >= VERIFY_DELAYS.length) return;
+        UUID body = s.entity;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (slots.get(s.id) != s || s.entity == null || !s.entity.equals(body)) return;   // replaced meanwhile
+            Entity e = Bukkit.getEntity(s.entity);
+            if (e == null || bodyLooksRight(s, e)) return;
+            if (attempt + 1 >= VERIFY_DELAYS.length) {
+                plugin.getLogger().warning("Shop '" + s.id + "': its body has no MythicMob / ModelEngine model and could not be repaired. Check that the mob / model still exists.");
+                return;
+            }
+            rebuild(s, attempt + 1);
+        }, VERIFY_DELAYS[attempt]);
+    }
+
+    /** Throws away a broken body and makes a fresh one. */
+    private void rebuild(Slot s, int attempt) {
+        Location at = parse(s.location);
+        Entity old = s.entity == null ? null : Bukkit.getEntity(s.entity);
+        if (at == null && old != null) at = old.getLocation();
+        if (at == null) return;
+        releaseBody(s, true);
+        Entity fresh = s.kind == Kind.MYTHIC ? (mythic == null ? null : mythic.spawn(effectiveMythic(s), at)) : spawnModelBody(at, effectiveModels(s));
+        if (fresh != null) bind(s, fresh, attempt);
+        else retrySync(s, "could not re-create its body");
+    }
+
+    private void retrySync(Slot s, String why) {
+        if (s.retries >= 4) {
+            plugin.getLogger().warning("Shop '" + s.id + "': " + why);
+            return;
+        }
+        long delay = 100L * (1L << s.retries);   // 5s, 10s, 20s, 40s
+        s.retries++;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> { if (slots.get(s.id) == s) sync(s); }, delay);
     }
 
     // ------------------------------------------------------------ chunk / world / entity events
@@ -434,11 +496,11 @@ public class NpcManager {
         e.getPersistentDataContainer().remove(idKey);
     }
 
-    /** Plugin shutdown: vanilla villagers are removed so they are never saved; linked bodies stay, tagged, for next start. */
+    /** Plugin shutdown: vanilla villagers and MythicMobs bodies are removed (re-created from the slot on the next start, so no stale leftovers are saved); ModelEngine bodies stay, tagged. */
     public void shutdown() {
         for (Slot s : slots.values()) {
             Entity e = s.entity == null ? null : Bukkit.getEntity(s.entity);
-            if (e != null && s.kind == Kind.VANILLA) e.remove();
+            if (e != null && (s.kind == Kind.VANILLA || s.kind == Kind.MYTHIC)) e.remove();   // both are re-created on the next start
         }
         for (World w : Bukkit.getWorlds()) {   // crash leftovers
             for (Villager v : w.getEntitiesByClass(Villager.class)) {

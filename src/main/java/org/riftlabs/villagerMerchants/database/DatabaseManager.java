@@ -16,7 +16,7 @@ public class DatabaseManager {
                           int salePercent, long saleExpiry, boolean saleListed, long featuredUntil, String staff,
                           String npcId, String linkedSkin) {}
     /** One shop NPC slot: a stable, admin-chosen id plus what is standing there (vanilla villager or a linked custom entity). */
-    public record NpcRow(String id, String kind, String location, String ref) {}
+    public record NpcRow(String id, String kind, String location, String ref, boolean models) {}
     public record ClaimRow(int id, String data) {}
     public record TxRow(long id, long ts, String shopId, String seller, String buyer, String buyerName,
                         String kind, String itemType, String itemName, int itemQty, int trades,
@@ -77,7 +77,8 @@ public class DatabaseManager {
                 + "npc_id VARCHAR(32) PRIMARY KEY, "
                 + "kind VARCHAR(16) NOT NULL, "
                 + "location VARCHAR(255) NOT NULL, "
-                + "link_ref TEXT);";
+                + "link_ref TEXT, "
+                + "has_model INTEGER DEFAULT 0);";
         String claims = "CREATE TABLE IF NOT EXISTS claims ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "owner_uuid VARCHAR(36), "
@@ -150,6 +151,7 @@ public class DatabaseManager {
                 try { s.execute("ALTER TABLE player_profiles ADD COLUMN " + col); } catch (SQLException ignored) {}
             }
             try { s.execute("ALTER TABLE shops ADD COLUMN trade_prices TEXT"); } catch (SQLException ignored) {}
+            try { s.execute("ALTER TABLE shop_npcs ADD COLUMN has_model INTEGER DEFAULT 0"); } catch (SQLException ignored) {}
             for (String col : new String[]{
                     "sale_percent INTEGER DEFAULT 0", "sale_expiry INTEGER DEFAULT 0", "sale_listed INTEGER DEFAULT 0",
                     "featured_until INTEGER DEFAULT 0", "staff TEXT", "npc_id VARCHAR(32)", "linked_skin VARCHAR(64)"}) {
@@ -192,8 +194,8 @@ public class DatabaseManager {
     public List<NpcRow> loadNpcs() {
         List<NpcRow> rows = new ArrayList<>();
         try (Connection c = getConnection(); Statement s = c.createStatement();
-             ResultSet rs = s.executeQuery("SELECT npc_id, kind, location, link_ref FROM shop_npcs")) {
-            while (rs.next()) rows.add(new NpcRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4)));
+             ResultSet rs = s.executeQuery("SELECT npc_id, kind, location, link_ref, has_model FROM shop_npcs")) {
+            while (rs.next()) rows.add(new NpcRow(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5) != 0));
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to load shop NPCs: " + e.getMessage());
         }
@@ -201,12 +203,13 @@ public class DatabaseManager {
     }
 
     public void upsertNpc(NpcRow r) {
-        String q = "INSERT OR REPLACE INTO shop_npcs (npc_id, kind, location, link_ref) VALUES (?, ?, ?, ?)";
+        String q = "INSERT OR REPLACE INTO shop_npcs (npc_id, kind, location, link_ref, has_model) VALUES (?, ?, ?, ?, ?)";
         try (Connection c = getConnection(); PreparedStatement ps = c.prepareStatement(q)) {
             ps.setString(1, r.id());
             ps.setString(2, r.kind());
             ps.setString(3, r.location());
             ps.setString(4, r.ref());
+            ps.setInt(5, r.models() ? 1 : 0);
             ps.executeUpdate();
         } catch (SQLException e) {
             plugin.getLogger().severe("Failed to save shop NPC " + r.id() + ": " + e.getMessage());
