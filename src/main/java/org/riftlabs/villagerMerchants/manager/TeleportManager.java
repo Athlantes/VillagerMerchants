@@ -8,7 +8,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.util.Messages;
@@ -29,8 +29,8 @@ public class TeleportManager {
             "POWDER_SNOW", "COBWEB", "LAVA");
 
     private final VillagerMerchants plugin;
-    private final Map<UUID, Long> cooldownUntil = new HashMap<>();
-    private final Map<UUID, BukkitTask> pending = new HashMap<>();
+    private final Map<UUID, Long> cooldownUntil = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Sched.Handle> pending = new java.util.concurrent.ConcurrentHashMap<>();
 
     public TeleportManager(VillagerMerchants plugin) { this.plugin = plugin; }
 
@@ -97,42 +97,47 @@ public class TeleportManager {
         final int[] waited = {0};
         final double tolerance = Math.max(0.0, cfg().getDouble("directory.teleport.move-tolerance", 0.7));
         m.send(p, "teleport.warmup", "seconds", warmup);
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
-            @Override public void run() {
-                if (!p.isOnline()) { cancelPending(p.getUniqueId()); return; }
-                Location now = p.getLocation();
-                if (now.getWorld() != start.getWorld() || now.distanceSquared(start) > tolerance * tolerance) {
-                    cancelPending(p.getUniqueId());
-                    m.send(p, "teleport.cancelled-moved");
-                    return;
-                }
-                waited[0] += 5;
-                if (waited[0] >= warmup * 20) {
-                    cancelPending(p.getUniqueId());
-                    go(p, shop, target, skipCooldown, skipCost);
-                }
+        // The warm-up runs on the player's own region thread, so reading their position is always safe.
+        Sched.Handle task = Sched.entityTimer(p, h -> {
+            if (!p.isOnline()) { cancelPending(p.getUniqueId()); return; }
+            Location now = p.getLocation();
+            if (now.getWorld() != start.getWorld() || now.distanceSquared(start) > tolerance * tolerance) {
+                cancelPending(p.getUniqueId());
+                m.send(p, "teleport.cancelled-moved");
+                return;
             }
-        }, 5L, 5L);
+            waited[0] += 5;
+            if (waited[0] >= warmup * 20) {
+                cancelPending(p.getUniqueId());
+                go(p, shop, target, skipCooldown, skipCost);
+            }
+        }, () -> pending.remove(p.getUniqueId()), 5L, 5L);
         pending.put(p.getUniqueId(), task);
     }
 
     public void cancelPending(UUID player) {
-        BukkitTask t = pending.remove(player);
+        Sched.Handle t = pending.remove(player);
         if (t != null) t.cancel();
     }
 
-    /** Loads the destination chunk, then (back on the main thread) validates, charges and teleports. */
+    /**
+     * Loads the destination chunk, finds a safe spot on the region that owns it, then (back on the player's thread)
+     * validates, charges and teleports. Folia: the destination and the player may belong to different regions.
+     */
     private void go(Player p, Shop shop, Location target, boolean skipCooldown, boolean skipCost) {
         target.getWorld().getChunkAtAsync(target).thenAccept(chunk ->
-                Bukkit.getScheduler().runTask(plugin, () -> finish(p, shop, target, skipCooldown, skipCost))
+                Sched.at(target, () -> {
+                    Location spot = findSpot(target);   // reads blocks: must run where the destination is
+                    Sched.entity(p, () -> finish(p, shop, spot, skipCooldown, skipCost));
+                })
         ).exceptionally(ex -> {
-            Bukkit.getScheduler().runTask(plugin, () ->
-                    plugin.msg().send(p, "teleport.load-failed"));
+            Sched.entity(p, () -> plugin.msg().send(p, "teleport.load-failed"));
             return null;
         });
     }
 
-    private void finish(Player p, Shop shop, Location target, boolean skipCooldown, boolean skipCost) {
+    /** Runs on the player's thread. {@code spot} is the safe spot found by {@link #go} (null if there is none). */
+    private void finish(Player p, Shop shop, Location spot, boolean skipCooldown, boolean skipCost) {
         if (!p.isOnline()) return;
         if (!plugin.access().canTeleport(p)) {   // lost the permission during the warm-up
             plugin.msg().send(p, "teleport.no-permission");
@@ -143,7 +148,6 @@ public class TeleportManager {
             plugin.msg().send(p, "teleport.closed-while-waiting");
             return;
         }
-        Location spot = findSpot(target);
         if (spot == null) {
             plugin.msg().send(p, "teleport.no-safe-spot");
             return;
@@ -163,7 +167,7 @@ public class TeleportManager {
         }
 
         final String owner = sm.ownerName(shop.getOwner());
-        p.teleportAsync(spot).thenAccept(ok -> Bukkit.getScheduler().runTask(plugin, () -> {
+        p.teleportAsync(spot).thenAccept(ok -> Sched.entity(p, () -> {
             if (ok) {
                 var m = plugin.msg();
                 m.send(p, "teleport.welcome", "owner", owner,

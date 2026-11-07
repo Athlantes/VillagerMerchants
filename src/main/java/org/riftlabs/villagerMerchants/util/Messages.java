@@ -43,7 +43,7 @@ public final class Messages {
     private static final String[] BUNDLED = {"en"};
 
     private final JavaPlugin plugin;
-    private final Set<String> warned = new HashSet<>();
+    private final Set<String> warned = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private YamlConfiguration active = new YamlConfiguration();
     private YamlConfiguration bundled = new YamlConfiguration();
     private String language = "en";

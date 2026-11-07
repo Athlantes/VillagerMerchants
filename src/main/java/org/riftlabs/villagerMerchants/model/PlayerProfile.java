@@ -11,16 +11,16 @@ public class PlayerProfile {
     private int taxLevel;
     private int maxRentDays;
     private int slotLevel;
-    private final Set<String> unlockedSkins = new HashSet<>();
+    private final Set<String> unlockedSkins = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private String skinType = "plains";
     private String skinProfession = "none";
 
     // Nametag Customization State
-    private final Set<String> unlockedNametags = new HashSet<>();
+    private final Set<String> unlockedNametags = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private String equippedNametagFormat = "<green><bold>Available Shop</bold></green>";
 
     // Effect (particle) Customization State
-    private final Set<String> unlockedEffects = new HashSet<>();
+    private final Set<String> unlockedEffects = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private String equippedEffect = "";
 
     public PlayerProfile(UUID uuid, int unlockedSlots, int taxLevel, int maxRentDays) {

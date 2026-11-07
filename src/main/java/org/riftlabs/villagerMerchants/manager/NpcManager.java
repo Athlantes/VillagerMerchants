@@ -13,10 +13,13 @@ import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.NpcRow;
 import org.riftlabs.villagerMerchants.hook.MythicHook;
+import org.riftlabs.villagerMerchants.listeners.NpcLookTask;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.hook.ModelEngineHook;
 import org.riftlabs.villagerMerchants.util.LinkedSkins;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -25,6 +28,10 @@ import java.util.regex.Pattern;
  *
  * <p>Bodies are found again through a PDC tag on the entity, and (vanilla / MythicMobs) re-created when a chunk
  * loads without one. Rentals hang off the slot id, so they survive the body being replaced.
+ *
+ * <p><b>Folia:</b> a body is an entity, so it may only be touched on the thread of the region it stands in. Public
+ * methods can be called from any thread; they update the slot bookkeeping (concurrent maps) at once and hop to the
+ * right region for the entity work ({@link Sched#entity}, {@link Sched#chunk}).
  */
 public class NpcManager {
     public enum Kind {
@@ -39,9 +46,9 @@ public class NpcManager {
         public Kind kind;
         public String location;   // world;x;y;z;yaw;pitch
         public String ref;        // MYTHIC: mob type, MODEL_ENGINE: model ids, VANILLA: null
-        public UUID entity;       // current body, null while its chunk is unloaded
+        public volatile UUID entity;   // current body, null while its chunk is unloaded
         public boolean expectsModel;   // the body wears a ModelEngine model (so a body without one is broken)
-        int retries;                   // failed (re)spawn attempts since the last good body
+        volatile int retries;          // failed (re)spawn attempts since the last good body
         String world; int cx, cz;
 
         Slot(String id, Kind kind, String location, String ref) {
@@ -66,11 +73,11 @@ public class NpcManager {
     private final VillagerMerchants plugin;
     private final DatabaseManager db;
     private final NamespacedKey idKey;
-    private final Map<String, Slot> slots = new LinkedHashMap<>();
-    private final Map<UUID, Slot> byEntity = new HashMap<>();
+    private final Map<String, Slot> slots = Collections.synchronizedMap(new LinkedHashMap<>());   // insertion order; copy before iterating (all())
+    private final Map<UUID, Slot> byEntity = new ConcurrentHashMap<>();
     private MythicHook mythic;
     private ModelEngineHook modelEngine;
-    private LinkedSkins linkedSkins;
+    private volatile LinkedSkins linkedSkins;
 
     public NpcManager(VillagerMerchants plugin, DatabaseManager db) {
         this.plugin = plugin;
@@ -93,7 +100,8 @@ public class NpcManager {
     // ------------------------------------------------------------ lookup
 
     public Slot get(String id) { return id == null ? null : slots.get(id.toLowerCase(Locale.ROOT)); }
-    public Collection<Slot> all() { return Collections.unmodifiableCollection(slots.values()); }
+    /** A snapshot: safe to iterate while other regions add or remove slots. */
+    public Collection<Slot> all() { synchronized (slots) { return new ArrayList<>(slots.values()); } }
     public Slot ofEntity(UUID u) { return u == null ? null : byEntity.get(u); }
     public Slot ofEntity(Entity e) { return e == null ? null : byEntity.get(e.getUniqueId()); }
 
@@ -152,7 +160,7 @@ public class NpcManager {
 
     /** Spawns / re-binds the body of every slot whose chunk is loaded. The rest follow when their chunk loads. */
     public void spawnAll() {
-        for (Slot s : new ArrayList<>(slots.values())) sync(s);
+        for (Slot s : all()) sync(s);
     }
 
     // ------------------------------------------------------------ create / link / remove
@@ -162,7 +170,7 @@ public class NpcManager {
         Slot s = new Slot(id, Kind.VANILLA, format(at), null);
         slots.put(id, s);
         save(s);
-        bind(s, spawnVillager(at));
+        Sched.at(at, () -> bind(s, spawnVillager(at)));   // inline when the caller already stands in that region
         return s;
     }
 
@@ -187,6 +195,7 @@ public class NpcManager {
 
     /** /vm mm create, /vm meg create: spawns a MythicMob of this type, or a ModelEngine model, as a new shop NPC. Null if the spawn failed. */
     public Slot createCustom(String id, Kind kind, String ref, Location at) {
+        if (!Bukkit.isOwnedByCurrentRegion(at)) return null;   // spawning needs the region that owns the spot (a player command always is)
         Entity body = kind == Kind.MYTHIC ? (mythic == null ? null : mythic.spawn(ref, at)) : spawnModelBody(at, ref);
         if (body == null) return null;
         return link(id, body, kind, ref);
@@ -211,8 +220,11 @@ public class NpcManager {
         }
         s.expectsModel = kind == Kind.MODEL_ENGINE || (modelEngine != null && modelEngine.available() && modelEngine.modelsOf(target) != null);
         save(s);
-        if (kind == Kind.MODEL_ENGINE) target.setPersistent(true);   // so the model's base entity survives restarts
-        bind(s, target);
+        final Slot slot = s;
+        Sched.entity(target, () -> {
+            if (kind == Kind.MODEL_ENGINE) target.setPersistent(true);   // so the model's base entity survives restarts
+            bind(slot, target);
+        });
         return s;
     }
 
@@ -224,18 +236,21 @@ public class NpcManager {
     }
 
     private void releaseBody(Slot s, boolean kill) {
-        Entity e = s.entity == null ? null : Bukkit.getEntity(s.entity);
-        if (s.entity != null) {
-            byEntity.remove(s.entity);
-            plugin.getNametagManager().removeNametag(s.entity);
-            plugin.getEffectManager().clear(s.entity);
+        UUID id = s.entity;
+        Entity e = id == null ? null : Bukkit.getEntity(id);
+        if (id != null) {
+            byEntity.remove(id);
+            plugin.getNametagManager().removeNametag(id);
+            plugin.getEffectManager().clear(id);
         }
         s.entity = null;
         if (e == null) return;
-        e.getPersistentDataContainer().remove(plugin.getShopManager().getShopKey());
-        e.getPersistentDataContainer().remove(idKey);
-        if (kill) e.remove();
-        else e.setInvulnerable(false);
+        Sched.entity(e, () -> {   // inline when we are already on its thread
+            e.getPersistentDataContainer().remove(plugin.getShopManager().getShopKey());
+            e.getPersistentDataContainer().remove(idKey);
+            if (kill) e.remove();
+            else e.setInvulnerable(false);
+        });
     }
 
     /**
@@ -300,8 +315,15 @@ public class NpcManager {
      */
     public void applySkin(Slot s, LinkedSkins.Variant v) {
         if (s.kind == Kind.VANILLA) return;
-        Entity e = s.entity == null ? null : Bukkit.getEntity(s.entity);
-        if (e == null) return;   // chunk not loaded: applied by bind() when the body returns
+        UUID id = s.entity;
+        Entity found = id == null ? null : Bukkit.getEntity(id);
+        if (found == null) return;   // chunk not loaded: applied by bind() when the body returns
+        Sched.entity(found, () -> applySkinNow(s, v, found));
+    }
+
+    /** Runs on the body's thread. */
+    private void applySkinNow(Slot s, LinkedSkins.Variant v, Entity e) {
+        if (!e.isValid() || slots.get(s.id) != s) return;
         boolean wantsMythic = v != null && v.mythic() != null;
         if (s.kind == Kind.MYTHIC && mythic != null && (wantsMythic || (v == null && !s.ref.equals(mythic.typeOf(e))))) {
             String type = wantsMythic ? v.mythic() : s.ref;
@@ -346,13 +368,23 @@ public class NpcManager {
         if (s.linked()) e.setInvulnerable(true);
         plugin.getShopManager().refreshNameTag(e);
         if (s.kind != Kind.VANILLA) {
-            Bukkit.getScheduler().runTask(plugin, () -> reapplySkin(s));   // the model may only be there a tick later
+            Sched.entityNext(e, () -> reapplySkin(s));   // the model may only be there a tick later
             verifyLater(s, attempt);
+        } else if (e instanceof Villager villager) {
+            NpcLookTask.attach(plugin, villager);          // turns to face players, on this villager's own region thread
         }
     }
 
-    /** Makes sure the slot has a live body if its chunk is loaded. */
+    /** Makes sure the slot has a live body if its chunk is loaded. Safe from any thread: the work runs on the chunk's region. */
     public void sync(Slot s) {
+        World w = Bukkit.getWorld(s.world);
+        if (w == null) return;
+        Sched.chunk(w, s.cx, s.cz, () -> syncNow(s));
+    }
+
+    /** The real sync. Must run on the region that owns the slot's chunk. */
+    private void syncNow(Slot s) {
+        if (slots.get(s.id) != s) return;   // removed meanwhile
         if (s.entity != null) {
             Entity cur = Bukkit.getEntity(s.entity);
             if (cur != null && cur.isValid()) return;
@@ -404,10 +436,11 @@ public class NpcManager {
     private void verifyLater(Slot s, int attempt) {
         if (attempt >= VERIFY_DELAYS.length) return;
         UUID body = s.entity;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        Entity bodyEntity = body == null ? null : Bukkit.getEntity(body);
+        if (bodyEntity == null) return;
+        Sched.entityLater(bodyEntity, () -> {   // on the body's own thread
             if (slots.get(s.id) != s || s.entity == null || !s.entity.equals(body)) return;   // replaced meanwhile
-            Entity e = Bukkit.getEntity(s.entity);
-            if (e == null || bodyLooksRight(s, e)) return;
+            if (!bodyEntity.isValid() || bodyLooksRight(s, bodyEntity)) return;
             if (attempt + 1 >= VERIFY_DELAYS.length) {
                 plugin.getLogger().warning("Shop '" + s.id + "': its body has no MythicMob / ModelEngine model and could not be repaired. Check that the mob / model still exists.");
                 return;
@@ -435,7 +468,8 @@ public class NpcManager {
         }
         long delay = 100L * (1L << s.retries);   // 5s, 10s, 20s, 40s
         s.retries++;
-        Bukkit.getScheduler().runTaskLater(plugin, () -> { if (slots.get(s.id) == s) sync(s); }, delay);
+        World w = Bukkit.getWorld(s.world);
+        if (w != null) Sched.chunkLater(w, s.cx, s.cz, () -> { if (slots.get(s.id) == s) syncNow(s); }, delay);
     }
 
     // ------------------------------------------------------------ chunk / world / entity events
@@ -457,11 +491,11 @@ public class NpcManager {
             }
         }
         List<Slot> here = new ArrayList<>();
-        for (Slot s : slots.values()) {
+        for (Slot s : all()) {
             if (s.cx == chunk.getX() && s.cz == chunk.getZ() && s.world.equals(chunk.getWorld().getName())
                     && s.entity == null) here.add(s);
         }
-        if (!here.isEmpty()) Bukkit.getScheduler().runTask(plugin, () -> here.forEach(this::sync));
+        if (!here.isEmpty()) Sched.chunkLater(chunk.getWorld(), chunk.getX(), chunk.getZ(), () -> here.forEach(this::syncNow), 1L);
     }
 
     public void onEntitiesUnload(List<Entity> entities) {
@@ -482,13 +516,14 @@ public class NpcManager {
         plugin.getNametagManager().removeNametag(e.getUniqueId());
         plugin.getEffectManager().clear(e.getUniqueId());
         s.entity = null;
-        if (s.kind != Kind.MODEL_ENGINE) Bukkit.getScheduler().runTaskLater(plugin, () -> { if (slots.get(s.id) == s) sync(s); }, 40L);
+        World w = Bukkit.getWorld(s.world);
+        if (s.kind != Kind.MODEL_ENGINE && w != null) Sched.chunkLater(w, s.cx, s.cz, () -> { if (slots.get(s.id) == s) syncNow(s); }, 40L);
     }
 
     public void onWorldLoad(World w) {
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            for (Slot s : new ArrayList<>(slots.values())) if (s.world.equals(w.getName())) sync(s);
-        });
+        Sched.globalLater(() -> {
+            for (Slot s : all()) if (s.world.equals(w.getName())) sync(s);   // sync() hops to each chunk's region
+        }, 1L);
     }
 
     private void stripTags(Entity e) {
@@ -498,7 +533,10 @@ public class NpcManager {
 
     /** Plugin shutdown: vanilla villagers and MythicMobs bodies are removed (re-created from the slot on the next start, so no stale leftovers are saved); ModelEngine bodies stay, tagged. */
     public void shutdown() {
-        for (Slot s : slots.values()) {
+        // Folia: no thread may touch entities during shutdown, and none needs to. The villagers are not persistent, so
+        // they are never saved; MythicMobs bodies that stay behind are found again by their tag when the chunk loads.
+        if (Sched.isFolia()) return;
+        for (Slot s : all()) {
             Entity e = s.entity == null ? null : Bukkit.getEntity(s.entity);
             if (e != null && (s.kind == Kind.VANILLA || s.kind == Kind.MYTHIC)) e.remove();   // both are re-created on the next start
         }

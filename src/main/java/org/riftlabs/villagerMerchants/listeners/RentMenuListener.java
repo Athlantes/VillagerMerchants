@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.listeners;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -28,7 +29,7 @@ public class RentMenuListener implements Listener {
     private final double rentPrice = 5000.0; // Pull this from config.yml later
 
     // Tracks which player is looking at which NPC
-    private final HashMap<UUID, UUID> activeRentSessions = new HashMap<>();
+    private final java.util.Map<UUID, UUID> activeRentSessions = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RentMenuListener(VillagerMerchants plugin) {
         this.plugin = plugin;
@@ -112,7 +113,7 @@ public class RentMenuListener implements Listener {
         plugin.getEconomy().withdrawPlayer(player, rentPrice);
 
         // Execute SQL Async
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+        Sched.async(() -> {
             // INSERT OR IGNORE creates the profile only if it doesn't exist (SQLite syntax)
             String profileQuery = "INSERT OR IGNORE INTO player_profiles (uuid) VALUES (?);";
 
@@ -134,15 +135,17 @@ public class RentMenuListener implements Listener {
                 shopStmt.setLong(3, expiryTime);
                 shopStmt.executeUpdate();
 
-                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                Sched.entity(player, () -> {
                     player.sendMessage(Component.text("Shop successfully rented for 7 days!").color(NamedTextColor.GREEN));
                     // Optional: Update NPC nametag here
                 });
 
             } catch (SQLException e) {
                 plugin.getLogger().severe("Failed to rent shop in database!");
-                plugin.getEconomy().depositPlayer(player, rentPrice); // Refund on failure
-                player.sendMessage(Component.text("An error occurred. You have been refunded.").color(NamedTextColor.RED));
+                Sched.entity(player, () -> {   // refund and message on the player's own thread, not the async one
+                    plugin.getEconomy().depositPlayer(player, rentPrice); // Refund on failure
+                    player.sendMessage(Component.text("An error occurred. You have been refunded.").color(NamedTextColor.RED));
+                });
             }
         });
     }

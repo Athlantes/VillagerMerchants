@@ -59,7 +59,8 @@ public class CategoryRegistry {
     }
 
     private final VillagerMerchants plugin;
-    private final Map<String, Category> categories = new LinkedHashMap<>();
+    // Folia: swapped in whole on reload so other regions never see a half-filled map
+    private volatile Map<String, Category> categories = new LinkedHashMap<>();
     private final Category other = new Category(OTHER_ID, "Other", Material.CHEST, Set.of(), List.of(), List.of(),
             List.of(), false, false, false, List.of(), false);
 
@@ -69,7 +70,7 @@ public class CategoryRegistry {
     }
 
     public void load() {
-        categories.clear();
+        Map<String, Category> categories = new LinkedHashMap<>();
         File f = new File(plugin.getDataFolder(), "categories.yml");
         if (!f.exists()) plugin.saveResource("categories.yml", false);
         ConfigurationSection root = YamlConfiguration.loadConfiguration(f).getConfigurationSection("categories");
@@ -93,6 +94,7 @@ public class CategoryRegistry {
             }
         }
         categories.put(OTHER_ID, other);
+        this.categories = categories;
     }
 
     /** "oraxen:*scythe*" style patterns (only * is special, case-insensitive) matched against the custom item id. */

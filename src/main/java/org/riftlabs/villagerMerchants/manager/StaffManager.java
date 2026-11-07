@@ -64,7 +64,7 @@ public class StaffManager {
         plugin.getShopManager().saveShop(shop);
         kickFromMenus(shop, target);
         Player online = Bukkit.getPlayer(target);
-        if (online != null) m.send(online, "staff.notice.removed", "owner", plugin.getShopManager().ownerName(shop.getOwner()));
+        if (online != null) plugin.syncFor(online, () -> m.send(online, "staff.notice.removed", "owner", plugin.getShopManager().ownerName(shop.getOwner())));
         return null;
     }
 
@@ -76,7 +76,7 @@ public class StaffManager {
         plugin.getShopManager().saveShop(shop);
         kickFromMenus(shop, target);   // reopening shows the menu for the new role
         Player online = Bukkit.getPlayer(target);
-        if (online != null) m.send(online, "staff.notice.role-changed", "owner", plugin.getShopManager().ownerName(shop.getOwner()), "role", role.label());
+        if (online != null) plugin.syncFor(online, () -> m.send(online, "staff.notice.role-changed", "owner", plugin.getShopManager().ownerName(shop.getOwner()), "role", role.label()));
         return null;
     }
 
@@ -84,7 +84,10 @@ public class StaffManager {
     private void kickFromMenus(Shop shop, UUID target) {
         Player p = Bukkit.getPlayer(target);
         if (p == null) return;
-        if (p.getOpenInventory().getTopInventory().getHolder() instanceof ShopBound sb && sb.shop() == shop) p.closeInventory();
+        // the target may be on another region than the person who changed their role: close it on their own thread
+        plugin.syncFor(p, () -> {
+            if (p.getOpenInventory().getTopInventory().getHolder() instanceof ShopBound sb && sb.shop() == shop) p.closeInventory();
+        });
     }
 
     /** Shops where this player works as staff (not as owner). */

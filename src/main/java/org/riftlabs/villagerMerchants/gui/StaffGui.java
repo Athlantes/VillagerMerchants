@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -124,7 +125,7 @@ public class StaffGui implements GuiHolder, ShopBound {
         if (plugin.getShopManager().isLive(shop)) new StaffGui(plugin, player, shop).open();
     }
 
-    private void later(Runnable r) { Bukkit.getScheduler().runTask(plugin, r); }
+    private void later(Runnable r) { Sched.entityNext(player, r); }
 
     @Override public Shop shop() { return shop; }
     @Override public Inventory getInventory() { return inv; }

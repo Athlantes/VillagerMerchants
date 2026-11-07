@@ -20,13 +20,15 @@ public class Shop {
     private String location;
     private String linkedSkin = "";   // equipped variant from linked-skins.yml (shops on a MythicMob / ModelEngine body)
     private final String npcId;     // the NPC slot (/vm create <shop-id>) this shop is rented at; null = legacy shop without a slot
-    private final Map<Integer, Trade> trades = new TreeMap<>();
+    // Folia: the owner edits, customers buy and the autosave reads, each possibly on a different region thread.
+    // A concurrent sorted map keeps the TreeMap ordering without ConcurrentModificationException.
+    private final Map<Integer, Trade> trades = new java.util.concurrent.ConcurrentSkipListMap<>();
     /** Live inventory: shared by owner (view) and trade logic, so no desync/dupes. */
     private final Inventory storage;
-    private boolean dirty;
+    private volatile boolean dirty;
 
     // ---- staff
-    private final Map<UUID, StaffRole> staff = new LinkedHashMap<>();
+    private final Map<UUID, StaffRole> staff = java.util.Collections.synchronizedMap(new LinkedHashMap<>());
 
     // ---- sale (percent > 0 and now < saleExpiry = running; saleExpiry is kept afterwards for the cooldown)
     private int salePercent;
@@ -97,9 +99,11 @@ public class Shop {
 
     public String serializeStaff() {
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<UUID, StaffRole> e : staff.entrySet()) {
-            if (sb.length() > 0) sb.append(',');
-            sb.append(e.getKey()).append(':').append(e.getValue().name());
+        synchronized (staff) {   // iterating a synchronized map needs its lock
+            for (Map.Entry<UUID, StaffRole> e : staff.entrySet()) {
+                if (sb.length() > 0) sb.append(',');
+                sb.append(e.getKey()).append(':').append(e.getValue().name());
+            }
         }
         return sb.toString();
     }

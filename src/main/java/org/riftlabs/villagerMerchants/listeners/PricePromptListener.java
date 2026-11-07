@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.listeners;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -47,7 +48,7 @@ public class PricePromptListener implements Listener {
         if (pr == null) return;
         e.setCancelled(true); // never broadcast the price
         String text = Text.plain(e.message()).trim();
-        Bukkit.getScheduler().runTask(plugin, () -> handle(p, pr, text));
+        Sched.entityNext(p, () -> handle(p, pr, text));
     }
 
     @EventHandler

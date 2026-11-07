@@ -6,6 +6,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.model.Perm;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.model.Trade;
@@ -42,7 +43,7 @@ public class PromotionManager {
 
     public void startTasks() {
         long period = tickSeconds() * 20L;
-        Bukkit.getScheduler().runTaskTimer(plugin, this::tick, period, period);
+        Sched.globalTimer(this::tick, period, period);   // global region: it only looks at shop data, entity work hops by itself
     }
 
     // ------------------------------------------------------------ sales: config
@@ -263,7 +264,7 @@ public class PromotionManager {
                 s.endSale(s.getSaleExpiry());
                 sm().saveShop(s);
                 sm().refreshNameTag(s);
-                if (owner != null) plugin.msg().send(owner, "sale.ended");
+                if (owner != null) plugin.syncFor(owner, () -> plugin.msg().send(owner, "sale.ended"));
             } else if (refreshBanners && s.isOnSale(now)) {               // keep the "(1h 20m)" fresh
                 plugin.getNametagManager().updateShopNametag(sm().entityIdOf(s), sm().activeNametagFormat(s));
             }
@@ -271,7 +272,7 @@ public class PromotionManager {
             if (s.getFeaturedUntil() > 0 && !s.isFeatured(now)) {        // featured time ran out
                 s.setFeaturedUntil(0);
                 sm().saveShop(s);
-                if (owner != null) plugin.msg().send(owner, "featured.expired");
+                if (owner != null) plugin.syncFor(owner, () -> plugin.msg().send(owner, "featured.expired"));
             }
         }
     }

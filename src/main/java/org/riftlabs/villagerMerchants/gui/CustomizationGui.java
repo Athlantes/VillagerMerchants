@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -30,7 +31,7 @@ import java.util.Map;
 
 public class CustomizationGui implements GuiHolder, ShopBound {
     private enum Tab { SKINS, NAMETAGS, EFFECTS }
-    private record NametagPreset(String id, String format, String name, double price, String permission, List<String> lockedLore) {}
+    private record NametagPreset(String id, String format, String name, double price, String currency, String permission, List<String> lockedLore) {}
 
     // Fixed layout slots for Skins tab
     private static final int[] TYPE_SLOTS = {10, 11, 12, 13, 14, 15, 16};
@@ -113,8 +114,9 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             String name = cfg.getString(key + ".name", plugin.msg().raw("misc.unknown"));
             String format = cfg.getString(key + ".format", plugin.msg().raw("nametag.fallback-format"));
             double price = cfg.getDouble(key + ".price", 0.0);
+            String currency = cfg.getString(key + ".currency", "vault");
             String permission = cfg.getString(key + ".permission", "");
-            allNametags.add(new NametagPreset(key, format, name, price, permission,
+            allNametags.add(new NametagPreset(key, format, name, price, currency, permission,
                     org.riftlabs.villagerMerchants.util.Lore.read(cfg, key + ".locked-lore")));
         }
     }
@@ -170,7 +172,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                 meta.displayName(Text.mm(parsedFormat));
 
                 List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-                lore.add(m.line("custom-gui.price", "price", data.price() <= 0 ? m.ref("misc.free") : Messages.parsed(Text.esc(sm.money(data.price())))));
+                lore.add(m.line("custom-gui.price", "price", data.price() <= 0 ? m.ref("misc.free") : Messages.parsed(Text.esc(sm.format(price(data.currency(), data.price()))))));
                 lore.add(net.kyori.adventure.text.Component.empty());
 
                 if (p.getEquippedNametagFormat().equals(data.format())) {
@@ -240,7 +242,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         for (int i = 0; i < variants.size() && i < CONTENT_SLOTS.length; i++) {
             LinkedSkins.Variant v = variants.get(i);
             Messages.Parsed name = Messages.parsed(v.name());
-            String price = sm.money(v.price());
+            String price = sm.format(price(v.currency(), v.price()));
             boolean own = v == base || (base != null && v.id().equals(base.id()));
             ItemStack it;
             if (cur != null && v.id().equals(cur.id())) {
@@ -287,7 +289,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             equipVariant(v);
             confirming = null;
         } else if (v.id().equals(confirming)) {
-            if (sm.charge(player, v.price())) {
+            if (sm.charge(player, price(v.currency(), v.price()))) {
                 p.unlockSkin(v.key());
                 sm.saveProfile(p);
                 equipVariant(v);
@@ -326,7 +328,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             List<Component> lore = new ArrayList<>();
             for (String line : def.description()) lore.add(m.line("custom-gui.effect-description-line", "line", Messages.parsed(line)));
             if (!def.description().isEmpty()) lore.add(Component.empty());
-            lore.add(m.line("custom-gui.price", "price", def.price() <= 0 ? m.ref("misc.free") : Messages.parsed(Text.esc(sm.money(def.price())))));
+            lore.add(m.line("custom-gui.price", "price", def.price() <= 0 ? m.ref("misc.free") : Messages.parsed(Text.esc(sm.format(price(def.currency(), def.price()))))));
             lore.add(Component.empty());
 
             boolean owned = def.price() <= 0 || p.ownsEffect(def.id());
@@ -383,7 +385,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             int secs = plugin.getEffectManager().getRegistry().previewSeconds();
             if (plugin.getEffectManager().preview(plugin.getShopManager().entityIdOf(shop), def.id(), secs, p.getEquippedEffect())) {
                 plugin.msg().send(player, "custom-gui.effect-previewing", "effect", Messages.parsed(def.name()), "seconds", secs);
-                Bukkit.getScheduler().runTask(plugin, () -> player.closeInventory());
+                Sched.entityNext(player, () -> player.closeInventory());
             }
             return;
         }
@@ -398,13 +400,10 @@ public class CustomizationGui implements GuiHolder, ShopBound {
             equipEffect(p, def.id());
             confirming = null;
         } else if (def.id().equals(confirming)) {
-            if (plugin.getEconomy().has(player, def.price())) {
-                plugin.getEconomy().withdrawPlayer(player, def.price());
+            if (plugin.getShopManager().charge(player, price(def.currency(), def.price()))) {
                 p.unlockEffect(def.id());
                 equipEffect(p, def.id());
                 plugin.msg().send(player, "custom-gui.purchased", "name", Messages.parsed(def.name()));
-            } else {
-                plugin.msg().send(player, "economy.not-enough", "amount", plugin.getShopManager().money(def.price()));
             }
             confirming = null;
         } else {
@@ -423,10 +422,15 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         } else if (sm.owns(p, s)) {
             return m.icon(s.icon(), "custom-gui.skin-owned", "skin", s.name());
         } else if (s.id().equals(confirming)) {
-            return Text.glow(m.icon(s.icon(), "custom-gui.skin-confirm", "skin", s.name(), "price", sm.money(sm.skinPrice(s))));
+            return Text.glow(m.icon(s.icon(), "custom-gui.skin-confirm", "skin", s.name(), "price", sm.format(sm.skinCost(s))));
         } else {
-            return m.icon(s.icon(), "custom-gui.skin-locked", "skin", s.name(), "price", sm.money(sm.skinPrice(s)));
+            return m.icon(s.icon(), "custom-gui.skin-locked", "skin", s.name(), "price", sm.format(sm.skinCost(s)));
         }
+    }
+
+    /** A price in the named currency, rounded to what that currency can charge. */
+    private org.riftlabs.villagerMerchants.economy.Price price(String currency, double amount) {
+        return plugin.getEconomies().price(currency, amount);
     }
 
     public void open() { player.openInventory(inv); }
@@ -438,7 +442,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
         int slot = e.getSlot();
 
         if (slot == 49) {
-            Bukkit.getScheduler().runTask(plugin, () -> new OwnerMenuGui(plugin, player, shop).open());
+            Sched.entityNext(player, () -> new OwnerMenuGui(plugin, player, shop).open());
             return;
         }
 
@@ -487,8 +491,7 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                     confirming = null;
                     render();
                 } else if (data.id().equals(confirming)) {
-                    if (plugin.getEconomy().has(player, data.price())) {
-                        plugin.getEconomy().withdrawPlayer(player, data.price());
+                    if (sm.charge(player, price(data.currency(), data.price()))) {
                         p.unlockNametag(data.id());
                         p.setEquippedNametagFormat(data.format());
                         plugin.getNametagManager().updateShopNametag(plugin.getShopManager().entityIdOf(shop), data.format());
@@ -496,8 +499,6 @@ public class CustomizationGui implements GuiHolder, ShopBound {
                                 plugin.getDatabaseManager().updateNametagData(player.getUniqueId().toString(), p.getUnlockedNametagsString(), p.getEquippedNametagFormat())
                         );
                         plugin.msg().send(player, "custom-gui.purchased", "name", Messages.parsed(data.name()));
-                    } else {
-                        plugin.msg().send(player, "economy.not-enough", "amount", sm.money(data.price()));
                     }
                     confirming = null;
                     render();

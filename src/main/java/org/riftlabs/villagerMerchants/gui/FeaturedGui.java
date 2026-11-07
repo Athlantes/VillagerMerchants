@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -74,7 +75,7 @@ public class FeaturedGui implements GuiHolder, ShopBound {
         if (e.getClickedInventory() != inv) return;
         if (!shop.can(player.getUniqueId(), Perm.BILLING)) { player.closeInventory(); return; }
         int slot = e.getSlot();
-        if (slot == BACK) { Bukkit.getScheduler().runTask(plugin, () -> new OwnerMenuGui(plugin, player, shop).open()); return; }
+        if (slot == BACK) { Sched.entityNext(player, () -> new OwnerMenuGui(plugin, player, shop).open()); return; }
         int i = slot - FIRST;
         if (i < 0 || i >= packages.size()) { confirming = -1; render(); return; }
         if (confirming != i) {

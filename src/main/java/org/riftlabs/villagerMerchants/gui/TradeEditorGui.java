@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -114,8 +115,8 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
             switch (slot) {
                 case 27 -> { if (page > 0) { page--; render(); } }
                 case 35 -> { if (page + 1 < pages()) { page++; render(); } }
-                case 29 -> Bukkit.getScheduler().runTask(plugin, () -> new OwnerMenuGui(plugin, player, shop).open());
-                case 33 -> { if (shop.isOwner(player.getUniqueId())) Bukkit.getScheduler().runTask(plugin, () -> new UpgradeGui(plugin, player, shop).open()); }
+                case 29 -> Sched.entityNext(player, () -> new OwnerMenuGui(plugin, player, shop).open());
+                case 33 -> { if (shop.isOwner(player.getUniqueId())) Sched.entityNext(player, () -> new UpgradeGui(plugin, player, shop).open()); }
                 default -> {}
             }
             return;
@@ -154,7 +155,7 @@ public class TradeEditorGui implements GuiHolder, ShopBound {
         } else if (row == 0 && moneyOn() && e.getClick() == ClickType.SHIFT_LEFT) {
             final int tradeIdx = idx, tradePage = page;
             shop.pruneTrade(idx); // don't leave an empty trade behind while the owner types
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            Sched.entityNext(player, () -> {
                 player.closeInventory();
                 plugin.getPrompts().begin(player, shop, tradeIdx, tradePage);
             });

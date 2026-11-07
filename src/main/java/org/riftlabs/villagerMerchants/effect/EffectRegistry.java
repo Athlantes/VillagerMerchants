@@ -16,7 +16,8 @@ import java.util.Map;
 /** Loads and validates effects.yml. Bad layers/effects are skipped with a console warning, never a crash. */
 public final class EffectRegistry {
     private final VillagerMerchants plugin;
-    private final Map<String, EffectDefinition> effects = new LinkedHashMap<>();
+    // Folia: read from every region's effect timers while /vm reload runs. Reload builds a new map and swaps it in whole.
+    private volatile Map<String, EffectDefinition> effects = new LinkedHashMap<>();
 
     private double viewDistance = 24;
     private int updateTicks = 1;
@@ -37,9 +38,9 @@ public final class EffectRegistry {
         previewSeconds = Math.max(1, cfg.getInt("settings.preview-seconds", 8));
         yOffset = cfg.getDouble("settings.y-offset", 0.0);
 
-        effects.clear();
+        Map<String, EffectDefinition> effects = new LinkedHashMap<>();
         ConfigurationSection root = cfg.getConfigurationSection("effects");
-        if (root == null) { plugin.getLogger().warning("effects.yml has no 'effects:' section."); return; }
+        if (root == null) { this.effects = effects; plugin.getLogger().warning("effects.yml has no 'effects:' section."); return; }
 
         for (String id : root.getKeys(false)) {
             ConfigurationSection e = root.getConfigurationSection(id);
@@ -66,10 +67,11 @@ public final class EffectRegistry {
             if (icon == null || !icon.isItem()) icon = Material.BLAZE_POWDER;
 
             effects.put(id, new EffectDefinition(id, e.getString("name", id), icon,
-                    Math.max(0, e.getDouble("price", 0.0)), e.getString("permission", ""),
+                    Math.max(0, e.getDouble("price", 0.0)), e.getString("currency", "vault"), e.getString("permission", ""),
                     e.getStringList("description"), List.copyOf(layers),
                     org.riftlabs.villagerMerchants.util.Lore.read(e, "locked-lore")));
         }
+        this.effects = effects;
         plugin.getLogger().info("Loaded " + effects.size() + " shop effects.");
     }
 

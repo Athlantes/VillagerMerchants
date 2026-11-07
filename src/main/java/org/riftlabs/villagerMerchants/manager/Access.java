@@ -42,7 +42,7 @@ public final class Access {
     /** Nodes that default to everyone (or to ops only in strict mode). */
     private static final List<String> FEATURE_NODES = List.of(
             "use", "rent", "shops", "shops.teleport",
-            "sales", "promote", "staff", "rate", "history", "claim",
+            "sales", "promote", "staff", "rate", "history", "analytics", "claim",
             "upgrades.slots", "upgrades.tax", "upgrades.duration",
             "customize.skins", "customize.nametags", "customize.effects");
 
@@ -72,6 +72,7 @@ public final class Access {
     public boolean canManageStaff(CommandSender p) { return has(p, "staff"); }
     public boolean canRate(CommandSender p) { return has(p, "rate"); }
     public boolean canViewHistory(CommandSender p) { return has(p, "history"); }
+    public boolean canViewAnalytics(CommandSender p) { return has(p, "analytics"); }
     public boolean canClaim(CommandSender p) { return has(p, "claim"); }
 
     // ------------------------------------------------------------ teleport bypasses

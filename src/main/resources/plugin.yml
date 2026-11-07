@@ -2,16 +2,17 @@ name: VillagerMerchants
 main: org.riftlabs.villagerMerchants.VillagerMerchants
 version: 1.0.0
 api-version: '1.21'
+folia-supported: true
 author: RiftLabs
 description: Premium player-rented villager shops with native merchant UI.
 depend: [Vault]
-softdepend: [Multiverse-Core, ItemsAdder, Oraxen, MMOItems, MythicLib, WorldGuard, GriefPrevention, Lands, PlaceholderAPI, MythicMobs, ModelEngine]
+softdepend: [PlayerPoints, TokenManager, Multiverse-Core, ItemsAdder, Oraxen, MMOItems, MythicLib, WorldGuard, GriefPrevention, Lands, PlaceholderAPI, MythicMobs, ModelEngine]
 
 commands:
   vm:
     description: VillagerMerchants main command
     aliases: [villagermerchants]
-    usage: /vm <claim|sales|purchases|rate|sale|staff|create|mm|meg|remove|reload|suspicious|protection>
+    usage: /vm <claim|sales|purchases|analytics|rate|sale|staff|create|mm|meg|remove|reload|suspicious|protection>
   shops:
     description: Browse open shops and teleport to them
     usage: /shops [search <item> | category <name> | sale | top [earners|rated|visited] [daily|weekly]]
@@ -33,6 +34,7 @@ permissions:
       villagermerchants.staff: true
       villagermerchants.rate: true
       villagermerchants.history: true
+      villagermerchants.analytics: true
       villagermerchants.claim: true
       villagermerchants.upgrades.*: true
       villagermerchants.customize.*: true
@@ -124,6 +126,9 @@ permissions:
     default: true
   villagermerchants.history:
     description: /vm sales and /vm purchases
+    default: true
+  villagermerchants.analytics:
+    description: /vm analytics and the map dashboard in the owner menu
     default: true
   villagermerchants.claim:
     description: /vm claim - collect items from expired shops

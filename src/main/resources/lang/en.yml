@@ -47,6 +47,7 @@ stars:
 economy:
   not-enough: "<prefix><red>You need <amount> for that."
   payment-failed: "<prefix><red>The payment failed."
+  currency-unavailable: "<prefix><red><currency> is not available on this server right now, so this can't be bought. Tell an admin."
 
 token:                         # the "price" item shown inside the trading window
   name: "<gold><price>"
@@ -243,6 +244,13 @@ owner-menu:
       - "<gray>Outfit: <white><outfit>"
       - ""
       - "<yellow>Click to customize NPC"
+  analytics:
+    name: "<gold>Shop Analytics"
+    lore:
+      - "<gray>Revenue, best sellers, customers"
+      - "<gray>and rating history on a map."
+      - ""
+      - "<yellow>Click to open"
   stats:
     name: "<aqua>Sales & Ratings"
     loading:
@@ -766,6 +774,56 @@ history:
   nav-prev: "<click:run_command:'<command>'><yellow>[Prev]</yellow></click>"
   nav-next: "<click:run_command:'<command>'><yellow>[Next]</yellow></click>"
 
+# ───────────────────────────── map analytics dashboard ─────────────────────────────
+analytics:
+  opened: "<gold>Analytics <gray>- <white>click<gray> flips pages, <white>sneak+click<gray> switches day/week, <white>Q<gray> closes"
+  unavailable: "<prefix><red>The analytics map is not available right now."
+  no-shop: "<prefix><red>You do not own a shop yet, so there is nothing to analyse."
+  pick-shop: "<prefix><red>You own several shops. Pick one: <white><list><red> (or <white>all<red>)."
+  item:
+    name: "<gold><bold>Shop Analytics"
+    lore:
+      - "<gray>Right-click: next page"
+      - "<gray>Left-click: previous page"
+      - "<gray>Sneak + right-click: day / week"
+      - "<gray>Drop (Q) or scroll away: close"
+  # Everything under map is drawn on the map itself with a tiny pixel font that only has A-Z, 0-9 and a few
+  # symbols. Accents are stripped and anything else becomes "?". Keep these short; <N> is a number.
+  map:
+    overview: "Overview"
+    revenue: "Revenue"
+    best-sellers: "Best sellers"
+    customers: "Customers"
+    ratings: "Ratings"
+    sales: "Sales"
+    rating: "Rating"
+    unit-day: "D"
+    unit-week: "W"
+    week-prefix: "W"
+    range-day: "Last <N> days"
+    range-week: "Last <N> weeks"
+    avg: "Avg"
+    peak: "Peak"
+    new: "New"
+    returning: "Back"
+    unique: "Unique"
+    top-buyers: "Top buyers"
+    buyers-per-day: "Buyers per day"
+    buyers-per-week: "Buyers per week"
+    units-sold: "Units sold"
+    top: "Top"
+    swap: "Swap"
+    trend: "Rating trend"
+    no-sales: "No sales yet"
+    no-sales-hint: "Your first sale shows up here"
+    no-ratings: "No ratings yet"
+    no-ratings-hint: "Buyers can rate after a purchase"
+    loading: "Loading"
+    all-shops: "All shops"
+    my-shop: "My shop"
+    hint-pages: "Click to flip pages"
+    hint-range: "Sneak+click: day/week"
+
 # ───────────────────────────── commands ─────────────────────────────
 cmd:
   help:
@@ -777,6 +835,7 @@ cmd:
     - "<gold>/vm staff list | add <player> [role] | remove <player> | role <player> <role>"
     - "<gold>/vm sales | purchases [page] <gray>- your transaction log"
     - "<gold>/vm rate <1-5> <gray>- rate the shop you last bought from"
+    - "<gold>/vm analytics [shop-id|all] <gray>- map dashboard: revenue, best sellers, customers, ratings"
   help-admin:
     - "<gold>/vm create <shop-id> <gray>- place a default villager shop (admin)"
     - "<gold>/vm mm create|link|remove <shop-id> [mob-type] <gray>- MythicMobs shops (admin)"

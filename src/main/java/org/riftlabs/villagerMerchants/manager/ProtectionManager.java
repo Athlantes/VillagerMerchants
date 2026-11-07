@@ -63,15 +63,15 @@ public class ProtectionManager {
     private interface HookFactory { ClaimHook make() throws Exception; }
 
     private final VillagerMerchants plugin;
-    private final Set<String> warned = new HashSet<>();
+    private final Set<String> warned = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private boolean enabled, onErrorAllow, applyToAdminCreate, requireBuild;
     private WorldGuardHook wg;
     private String wgNote = "";
     private FlagMode flagMode = FlagMode.OFF;
-    private final List<RegionRule> regions = new ArrayList<>();
-    private final List<ClaimRule> claimRules = new ArrayList<>();
-    private final List<String[]> claimNotes = new ArrayList<>();
+    private final List<RegionRule> regions = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<ClaimRule> claimRules = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<String[]> claimNotes = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     public ProtectionManager(VillagerMerchants plugin) {
         this.plugin = plugin;

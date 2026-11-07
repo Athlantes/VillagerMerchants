@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.manager;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
@@ -73,11 +74,12 @@ public class AntiAbuse {
 
     // ---- config snapshot (rebuilt by reload())
     private boolean enabled;
-    private final Set<String> bannedNames = new HashSet<>();
-    private final List<Pattern> bannedPatterns = new ArrayList<>();
-    private final Set<String> bannedCustom = new HashSet<>();
+    // Folia: read by customers on every region while /vm reload rewrites them, so all of these are concurrent
+    private final Set<String> bannedNames = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final List<Pattern> bannedPatterns = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final Set<String> bannedCustom = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private double defaultCap;
-    private final Map<String, Double> caps = new HashMap<>();
+    private final Map<String, Double> caps = new java.util.concurrent.ConcurrentHashMap<>();
     private long cooldownMs;
     private int maxPurchases;
     private long windowMs;
@@ -94,9 +96,9 @@ public class AntiAbuse {
     // ---- runtime state
     private final Map<UUID, Long> lastPurchase = new ConcurrentHashMap<>();
     private final Map<UUID, Deque<Long>> purchaseWindow = new ConcurrentHashMap<>();
-    private final Map<String, Deque<Long>> pairs = new HashMap<>();
-    private final Map<String, Long> pairFlagged = new HashMap<>();
-    private final Map<String, Long> throttle = new HashMap<>();
+    private final Map<String, Deque<Long>> pairs = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> pairFlagged = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> throttle = new java.util.concurrent.ConcurrentHashMap<>();
     private final Deque<String> recent = new ArrayDeque<>();
     private int sweepCounter;
     private ExecutorService writer;
@@ -230,7 +232,7 @@ public class AntiAbuse {
             return false;
         }
         if (maxPurchases > 0) {
-            Deque<Long> q = purchaseWindow.computeIfAbsent(id, k -> new ArrayDeque<>());
+            Deque<Long> q = purchaseWindow.computeIfAbsent(id, k -> new java.util.concurrent.ConcurrentLinkedDeque<>());
             while (!q.isEmpty() && q.peekFirst() < now - windowMs) q.pollFirst();
             if (q.size() >= maxPurchases) {
                 p.sendActionBar(plugin.msg().get("anti-abuse.rate-limited"));
@@ -266,7 +268,7 @@ public class AntiAbuse {
         }
 
         String key = buyer.getUniqueId() + ">" + shop.getOwner();
-        Deque<Long> q = pairs.computeIfAbsent(key, k -> new ArrayDeque<>());
+        Deque<Long> q = pairs.computeIfAbsent(key, k -> new java.util.concurrent.ConcurrentLinkedDeque<>());
         while (!q.isEmpty() && q.peekFirst() < now - pairWindowMs) q.pollFirst();
         q.addLast(now);
 
@@ -359,14 +361,12 @@ public class AntiAbuse {
     }
 
     private void alert(String type, String player, String owner, String detail) {
-        Runnable r = () -> {
-            for (Player staff : Bukkit.getOnlinePlayers()) {
-                if (plugin.access().canSeeAlerts(staff)) {
-                    plugin.msg().send(staff, "anti-abuse.alert", "type", type, "player", player, "owner", owner, "detail", detail);
-                }
+        // may be called from any region (or an async thread): each staff member is messaged on their own thread
+        for (Player staff : Bukkit.getOnlinePlayers()) {
+            if (plugin.access().canSeeAlerts(staff)) {
+                Sched.entity(staff, () -> plugin.msg().send(staff, "anti-abuse.alert", "type", type, "player", player, "owner", owner, "detail", detail));
             }
-        };
-        if (Bukkit.isPrimaryThread()) r.run(); else plugin.sync(r);
+        }
     }
 
     private synchronized void append(String line) {

@@ -5,7 +5,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.LbRow;
@@ -81,8 +81,8 @@ public class LeaderboardManager {
     /** Latest ranking per board, rebuilt every few seconds. Read freely from any thread. */
     private volatile Map<String, List<Entry>> cache = Map.of();
 
-    private BukkitTask refreshTask;
-    private BukkitTask resetTask;
+    private volatile Sched.Handle refreshTask;
+    private volatile Sched.Handle resetTask;
 
     public LeaderboardManager(VillagerMerchants plugin, DatabaseManager db) {
         this.plugin = plugin;
@@ -165,8 +165,9 @@ public class LeaderboardManager {
     public void startTasks() {
         cancelTasks();
         long refresh = Math.max(5, cfg().getLong("leaderboards.refresh-seconds", 30)) * 20L;
-        refreshTask = Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, 40L, refresh);
-        resetTask = Bukkit.getScheduler().runTaskTimer(plugin, this::checkResets, 100L, 20L * 30);
+        // Global region: ranking, rewards (console commands, economy) and the announcement are server-wide work.
+        refreshTask = Sched.globalTimer(this::refresh, 40L, refresh);
+        resetTask = Sched.globalTimer(this::checkResets, 100L, 20L * 30);
     }
 
     public void cancelTasks() {
@@ -318,10 +319,13 @@ public class LeaderboardManager {
                 if (online != null) {
                     String rewardText = money > 0
                             ? plugin.msg().str("leaderboards.reward-money", "money", Text.esc(plugin.getShopManager().money(money))) : "";
-                    plugin.msg().send(online, "leaderboards.reward-message", "rank", rank,
-                            "board", plugin.msg().raw("leaderboards.title." + c.id),
-                            "period", plugin.msg().raw("leaderboards.period." + p.id),
-                            "reward", org.riftlabs.villagerMerchants.util.Messages.parsed(rewardText));
+                    final int fRank = rank;
+                    final Category fc = c;
+                    plugin.syncFor(online, () ->   // the winner's own thread
+                            plugin.msg().send(online, "leaderboards.reward-message", "rank", fRank,
+                                    "board", plugin.msg().raw("leaderboards.title." + fc.id),
+                                    "period", plugin.msg().raw("leaderboards.period." + p.id),
+                                    "reward", org.riftlabs.villagerMerchants.util.Messages.parsed(rewardText)));
                 }
             }
         }

@@ -8,6 +8,7 @@ import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
 import org.riftlabs.villagerMerchants.model.Shop;
 import org.riftlabs.villagerMerchants.util.Messages;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.util.Text;
 
 import java.util.HashMap;
@@ -29,11 +30,11 @@ public class RatingManager {
     private final VillagerMerchants plugin;
     private final DatabaseManager db;
     /** "shopId|ownerId" -> {sum of stars, number of ratings}. */
-    private final Map<String, double[]> agg = new HashMap<>();
+    private final Map<String, double[]> agg = new java.util.concurrent.ConcurrentHashMap<>();
     /** player -> the shop they bought from last (lets "/vm rate 5" work without a shop id). */
-    private final Map<UUID, UUID> lastPurchased = new HashMap<>();
+    private final Map<UUID, UUID> lastPurchased = new java.util.concurrent.ConcurrentHashMap<>();
     /** "playerId|shopId" -> when we last asked them to rate. */
-    private final Map<String, Long> promptedAt = new HashMap<>();
+    private final Map<String, Long> promptedAt = new java.util.concurrent.ConcurrentHashMap<>();
 
     public RatingManager(VillagerMerchants plugin, DatabaseManager db) {
         this.plugin = plugin;
@@ -104,7 +105,7 @@ public class RatingManager {
         final String ownerName = plugin.getShopManager().ownerName(shop.getOwner());
         db.async(() -> {
             if (db.getRating(sid, owner, rater) > 0) return; // already rated: don't nag
-            plugin.sync(() -> {
+            plugin.syncFor(p, () -> {
                 if (!p.isOnline()) return;
                 var m = plugin.msg();
                 StringBuilder stars = new StringBuilder();
@@ -141,25 +142,27 @@ public class RatingManager {
 
         db.async(() -> {
             if (requirePurchase && !db.hasPurchased(sid, owner, rater)) {
-                plugin.sync(() -> plugin.msg().send(p, "ratings.need-purchase"));
+                plugin.syncFor(p, () -> plugin.msg().send(p, "ratings.need-purchase"));
                 return;
             }
             int previous = db.getRating(sid, owner, rater);
             db.upsertRating(sid, owner, rater, stars, System.currentTimeMillis());
             DatabaseManager.RatingAgg a = db.ratingAgg(sid, owner);
-            plugin.sync(() -> {
-                agg.put(key(sid, owner), new double[]{a.sum(), a.count()});
+            agg.put(key(sid, owner), new double[]{a.sum(), a.count()});   // concurrent map: fine from the database thread
+            plugin.syncFor(p, () -> {
                 if (p.isOnline()) {
                     plugin.msg().send(p, previous > 0 ? "ratings.updated" : "ratings.thanks", "stars", stars);
                 }
-                Player op = Bukkit.getPlayer(ownerId);
-                if (op != null) {
-                    plugin.msg().send(op, "ratings.received", "who", raterName, "stars", stars,
-                            "avg", Text.oneDecimal(a.count() == 0 ? 0 : a.sum() / a.count()), "count", a.count());
-                }
-                Shop rated = plugin.getShopManager().getShop(shopId);
-                if (rated != null) plugin.getShopManager().refreshNameTag(rated);
             });
+            Player op = Bukkit.getPlayer(ownerId);
+            if (op != null) {
+                plugin.syncFor(op, () -> plugin.msg().send(op, "ratings.received", "who", raterName, "stars", stars,
+                        "avg", Text.oneDecimal(a.count() == 0 ? 0 : a.sum() / a.count()), "count", a.count()));
+            }
+            Shop rated = plugin.getShopManager().getShop(shopId);
+            // Looking the NPC up (Bukkit.getEntity) must happen on a server tick thread, never on the database
+            // thread; refreshNameTag then hops on to the NPC's own region thread by itself.
+            if (rated != null) Sched.global(() -> plugin.getShopManager().refreshNameTag(rated));
         });
     }
 }

@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -32,7 +33,7 @@ import java.util.List;
 public class OwnerMenuGui implements GuiHolder, ShopBound {
     private static final int TRADES = 10, STORAGE = 12, UPGRADES = 14, RENT = 16;
     private static final int SALE = 19, FEATURED = 21, STAFF = 23, CUSTOM = 25;
-    private static final int STATS = 29, CANCEL = 33, INFO = 4;
+    private static final int STATS = 29, ANALYTICS = 31, CANCEL = 33, INFO = 4;
 
     private final VillagerMerchants plugin;
     private final Shop shop;
@@ -68,7 +69,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
 
     /** Sales numbers come from the database thread; the item is refreshed once they arrive. */
     private void loadStats() {
-        plugin.getTransactions().loadStats(shop, st -> {
+        plugin.getTransactions().loadStats(player, shop, st -> {
             var m = plugin.msg();
             int days = plugin.getTransactions().statsDays();
             statsLines = List.of(
@@ -174,6 +175,9 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
             if (owner) lore.add(m.line("owner-menu.stats.click-log"));
             inv.setItem(STATS, m.iconPlus(plugin.material("owner-stats", Material.BOOK), "owner-menu.stats", lore));
         }
+        if (showAnalytics()) {
+            inv.setItem(ANALYTICS, Text.glow(m.icon(plugin.material("owner-analytics", Material.MAP), "owner-menu.analytics")));
+        }
         if (owner) {
             String refund = sm.money(sm.cancelRefund(shop));
             if (confirmingCancel) {
@@ -185,6 +189,13 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
                         "refund", refund, "percent", pct));
             }
         }
+    }
+
+    /** Owners always; staff only when they hold the stats permission and analytics.staff-access is on. */
+    private boolean showAnalytics() {
+        var d = plugin.getDashboard();
+        if (d == null || !d.enabled() || !plugin.access().canViewAnalytics(player)) return false;
+        return owner || (d.staffAccess() && can(Perm.STATS));
     }
 
     public void open() { player.openInventory(inv); }
@@ -210,6 +221,13 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
                     plugin.getTransactions().showHistory(player, DatabaseManager.TxMode.SALES, player.getUniqueId(), player.getName(), 1);
                 });
             }
+            case ANALYTICS -> {
+                if (showAnalytics()) later(() -> {
+                    player.closeInventory();
+                    plugin.getDashboard().open(player, new org.riftlabs.villagerMerchants.analytics.Scope(shop.getOwner(), shop.getId(),
+                            shop.getNpcId() == null ? plugin.msg().str("analytics.map.my-shop") : shop.getNpcId()));
+                });
+            }
             case RENT -> {
                 if (!can(Perm.BILLING)) return;
                 if (!confirmingRent) confirmingRent = true;
@@ -225,7 +243,7 @@ public class OwnerMenuGui implements GuiHolder, ShopBound {
         }
     }
 
-    private void later(Runnable r) { Bukkit.getScheduler().runTask(plugin, r); }
+    private void later(Runnable r) { Sched.entityNext(player, r); }
 
     @Override public Shop shop() { return shop; }
     @Override public Inventory getInventory() { return inv; }

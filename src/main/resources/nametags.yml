@@ -2,6 +2,7 @@
 #   name:        shown in the menu
 #   format:      MiniMessage
 #   price:       0 = free
+#   currency:    optional. vault (default), playerpoints or tokenmanager. price is then an amount of that currency.
 #   permission:  optional. Players need this node to buy/equip the preset. Leave it out to use the default rule:
 #                open to everybody, or villagermerchants.nametag.<id> when customization.require-permission.nametags is on.
 #

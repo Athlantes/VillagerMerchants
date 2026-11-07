@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
@@ -24,7 +25,7 @@ import java.util.UUID;
 public class ShopInteractListener implements Listener {
     private final VillagerMerchants plugin;
     /** Last tick each player opened a shop: a click can reach us twice (vanilla event + ModelEngine hitbox event). */
-    private final Map<UUID, Integer> lastOpen = new HashMap<>();
+    private final Map<UUID, Integer> lastOpen = new java.util.concurrent.ConcurrentHashMap<>();
 
     public ShopInteractListener(VillagerMerchants plugin) { this.plugin = plugin; }
 
@@ -40,7 +41,7 @@ public class ShopInteractListener implements Listener {
 
     /** Opens the right menu for a click on a shop NPC. Also called by the ModelEngine hitbox bridge. */
     public void handleClick(Player player, Entity npc) {
-        int now = Bukkit.getCurrentTick();
+        int now = (int) (System.currentTimeMillis() / 50);   // ticks: Folia has no single server tick counter
         Integer last = lastOpen.put(player.getUniqueId(), now);
         if (last != null && now - last < 3) return;
 
@@ -90,6 +91,15 @@ public class ShopInteractListener implements Listener {
     @EventHandler
     public void onEntitiesUnload(EntitiesUnloadEvent e) {
         plugin.getNpcs().onEntitiesUnload(e.getEntities());
+    }
+
+    /**
+     * Shop NPCs cannot be hurt by anything: players (creative mode included, which ignores the invulnerable flag),
+     * mobs, fire, explosions, the void. Cancelling the event covers every cause.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onDamage(EntityDamageEvent e) {
+        if (isShopNpc(e.getEntity())) e.setCancelled(true);
     }
 
     /** A linked MythicMob that gets killed anyway (void, /kill ...) comes back after a moment. */

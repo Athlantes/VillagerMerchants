@@ -65,6 +65,11 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
                 plugin.getTransactions().showHistory(p, mode, p.getUniqueId(), p.getName(), pageArg(args, 1));
                 return true;
             }
+            case "analytics", "dashboard", "stats" -> {
+                if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
+                analyticsCommand(p, args);
+                return true;
+            }
             case "rate" -> {
                 if (!(sender instanceof Player p)) { plugin.msg().send(sender, "misc.players-only"); return true; }
                 rate(p, args);
@@ -471,6 +476,32 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
         if (want == NpcManager.Kind.MODEL_ENGINE) m.send(p, "cmd.link.me-note");
     }
 
+    /** /vm analytics [shop-id|all]: the owner's map dashboard. */
+    private void analyticsCommand(Player p, String[] args) {
+        var dash = plugin.getDashboard();
+        if (dash == null || !dash.enabled()) { plugin.msg().send(p, "analytics.unavailable"); return; }
+        if (!plugin.access().canUse(p) || !plugin.access().canViewAnalytics(p)) { plugin.msg().send(p, "misc.no-permission"); return; }
+        List<org.riftlabs.villagerMerchants.model.Shop> mine = new ArrayList<>();
+        for (var s : plugin.getShopManager().allShops()) if (s.isOwner(p.getUniqueId())) mine.add(s);
+        if (mine.isEmpty()) { plugin.msg().send(p, "analytics.no-shop"); return; }
+        var all = new org.riftlabs.villagerMerchants.analytics.Scope(p.getUniqueId(), null, plugin.msg().str("analytics.map.all-shops"));
+        if (args.length >= 2) {
+            if (args[1].equalsIgnoreCase("all")) { dash.open(p, all); return; }
+            for (var s : mine) {
+                if (s.getNpcId() != null && s.getNpcId().equalsIgnoreCase(args[1])) {
+                    dash.open(p, new org.riftlabs.villagerMerchants.analytics.Scope(p.getUniqueId(), s.getId(), s.getNpcId()));
+                    return;
+                }
+            }
+            plugin.msg().send(p, "analytics.pick-shop", "list", String.join(", ", mine.stream().map(s -> String.valueOf(s.getNpcId())).toList()));
+            return;
+        }
+        if (mine.size() == 1) {
+            var s = mine.get(0);
+            dash.open(p, new org.riftlabs.villagerMerchants.analytics.Scope(p.getUniqueId(), s.getId(), s.getNpcId() == null ? plugin.msg().str("analytics.map.my-shop") : s.getNpcId()));
+        } else dash.open(p, all);
+    }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> out = new ArrayList<>();
@@ -489,6 +520,12 @@ public class ShopCommand implements CommandExecutor, TabCompleter {
             } else if (args.length == 4 && (args[1].equalsIgnoreCase("add") || args[1].equalsIgnoreCase("role"))) {
                 for (String o : List.of("stocker", "manager", "co-owner")) if (o.startsWith(args[3].toLowerCase())) out.add(o);
             }
+            return out;
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("analytics") || args[0].equalsIgnoreCase("dashboard") || args[0].equalsIgnoreCase("stats")) && sender instanceof Player tp) {
+            out.add("all");
+            for (var s : plugin.getShopManager().allShops()) if (s.isOwner(tp.getUniqueId()) && s.getNpcId() != null) out.add(s.getNpcId());
+            out.removeIf(o -> !o.toLowerCase().startsWith(args[1].toLowerCase()));
             return out;
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("rate")) return new ArrayList<>(List.of("1", "2", "3", "4", "5"));

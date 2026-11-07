@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.gui;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -63,7 +64,7 @@ public class UpgradeGui implements GuiHolder, ShopBound {
                 case TAX -> m.str(base + ".gain", "percent", (int) Math.round(sm.perLevel(t) * 100));
                 case DURATION -> m.str(base + ".gain", "days", (int) sm.perLevel(t));
             };
-            String cost = sm.money(sm.upgradeCost(t, p));
+            String cost = sm.format(sm.upgradePrice(t, p));
             ItemStack it;
             if (!plugin.access().canUpgrade(player, t)) {
                 it = m.icon(Material.BARRIER, "upgrade.item.locked", "name", name);
@@ -88,7 +89,7 @@ public class UpgradeGui implements GuiHolder, ShopBound {
         if (e.getClickedInventory() != inv) return;
         int slot = e.getSlot();
         if (slot == BACK) {
-            Bukkit.getScheduler().runTask(plugin, () -> new OwnerMenuGui(plugin, player, shop).open());
+            Sched.entityNext(player, () -> new OwnerMenuGui(plugin, player, shop).open());
             return;
         }
         UpgradeType t = typeAt(slot);

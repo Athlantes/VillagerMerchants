@@ -1,6 +1,8 @@
 package org.riftlabs.villagerMerchants.manager;
 
 import net.milkbowl.vault.economy.Economy;
+import org.riftlabs.villagerMerchants.economy.Price;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -35,10 +37,11 @@ public class ShopManager {
     private final VillagerMerchants plugin;
     private final DatabaseManager db;
     private final NamespacedKey shopKey;
-    private final Map<UUID, Shop> shops = new HashMap<>();      // by stable shop id
-    private final Map<String, Shop> byNpc = new HashMap<>();    // by NPC slot id (the /vm create <shop-id> name)
-    private final Map<UUID, PlayerProfile> profiles = new HashMap<>();
-    private final Set<UUID> claiming = new HashSet<>();
+    // Folia: players on different regions use these at the same time, so they are all concurrent.
+    private final Map<UUID, Shop> shops = new java.util.concurrent.ConcurrentHashMap<>();      // by stable shop id
+    private final Map<String, Shop> byNpc = new java.util.concurrent.ConcurrentHashMap<>();    // by NPC slot id (the /vm create <shop-id> name)
+    private final Map<UUID, PlayerProfile> profiles = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Set<UUID> claiming = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public ShopManager(VillagerMerchants plugin, DatabaseManager db) {
         this.plugin = plugin;
@@ -97,7 +100,7 @@ public class ShopManager {
             }
         }
         // one tick later: MythicMobs / ModelEngine have finished enabling by then
-        Bukkit.getScheduler().runTask(plugin, npcs::spawnAll);
+        Sched.global(npcs::spawnAll);
         plugin.getLogger().info("Loaded " + shops.size() + " rented shops on " + npcs.all().size() + " shop NPCs.");
     }
 
@@ -111,12 +114,17 @@ public class ShopManager {
 
     public void startTasks() {
         long auto = Math.max(5, cfg().getLong("autosave-seconds", 30)) * 20L;
-        Bukkit.getScheduler().runTaskTimer(plugin, this::saveDirty, auto, auto);
+        Sched.globalTimer(this::saveDirty, auto, auto);
         long check = Math.max(10, cfg().getLong("rent.expiry-check-seconds", 60)) * 20L;
-        Bukkit.getScheduler().runTaskTimer(plugin, this::checkExpiry, 20L * 30, check);
+        Sched.globalTimer(this::checkExpiry, 20L * 30, check);
     }
 
+    /** Snapshot of a shop for the database. Takes the shop's lock: customers on other regions may be buying right now. */
     private DatabaseManager.ShopRow toRow(Shop s) {
+        synchronized (s) { return toRowLocked(s); }
+    }
+
+    private DatabaseManager.ShopRow toRowLocked(Shop s) {
         Map<Integer, Trade> map = s.getTrades();
         int max = map.isEmpty() ? -1 : Collections.max(map.keySet());
         ItemStack[] arr = new ItemStack[(max + 1) * 3];
@@ -228,7 +236,13 @@ public class ShopManager {
                 : plugin.msg().str("money.fallback", "amount", String.format(Locale.ROOT, "%.2f", amount));
     }
 
+    /** Safe from any thread: the work runs on the thread that owns the NPC. */
     public void refreshNameTag(Entity v) {
+        Sched.entity(v, () -> refreshNameTagNow(v));
+    }
+
+    private void refreshNameTagNow(Entity v) {
+        if (!v.isValid()) return;
         Shop s = getShopByEntity(v.getUniqueId());
         boolean vanilla = plugin.getNpcs().isVanilla(v);   // linked bodies keep their own name and look
         if (vanilla) {
@@ -350,19 +364,18 @@ public class ShopManager {
         return true;
     }
 
-    /** Withdraws money from the player (nothing is paid to anyone: a money sink). */
+    /** Withdraws Vault money from the player (nothing is paid to anyone: a money sink). Rent, featured listings, etc. */
     public boolean charge(Player p, double price) {
-        Economy econ = plugin.getEconomy();
-        if (!econ.has(p, price)) {
-            plugin.msg().send(p, "economy.not-enough", "amount", money(price));
-            return false;
-        }
-        if (!econ.withdrawPlayer(p, price).transactionSuccess()) {
-            plugin.msg().send(p, "economy.payment-failed");
-            return false;
-        }
-        return true;
+        return charge(p, plugin.getEconomies().vaultPrice(price));
     }
+
+    /** Same, in any currency (Vault, PlayerPoints, TokenManager). Tells the player why when it fails. */
+    public boolean charge(Player p, Price price) {
+        return plugin.getEconomies().charge(p, price);
+    }
+
+    /** "$5,000.00" / "250 Points" */
+    public String format(Price price) { return plugin.getEconomies().format(price); }
 
     public void checkExpiry() {
         long now = System.currentTimeMillis();
@@ -377,19 +390,21 @@ public class ShopManager {
     public void releaseShop(Shop shop, boolean keepItems, boolean notify) {
         if (shops.remove(shop.getId()) == null) return;
         if (shop.getNpcId() != null) byNpc.remove(shop.getNpcId(), shop);
-        for (HumanEntity v : new ArrayList<>(shop.getStorage().getViewers())) v.closeInventory();
+        for (HumanEntity v : new ArrayList<>(shop.getStorage().getViewers())) Sched.entity(v, v::closeInventory);
         plugin.getCustomerTrades().closeSessions(shop.getId());
 
-        if (keepItems) {
-            ItemStack[] contents = shop.getStorage().getContents();
-            boolean any = Arrays.stream(contents).anyMatch(i -> i != null && !i.getType().isAir());
-            if (any) {
-                String data = ItemCodec.encode(contents);
-                String owner = shop.getOwner().toString();
-                db.async(() -> db.addClaim(owner, data));
+        synchronized (shop) {   // a customer on another region may be mid-purchase
+            if (keepItems) {
+                ItemStack[] contents = shop.getStorage().getContents();
+                boolean any = Arrays.stream(contents).anyMatch(i -> i != null && !i.getType().isAir());
+                if (any) {
+                    String data = ItemCodec.encode(contents);
+                    String owner = shop.getOwner().toString();
+                    db.async(() -> db.addClaim(owner, data));
+                }
             }
+            shop.getStorage().clear();
         }
-        shop.getStorage().clear();
         String id = shop.getId().toString();
         db.async(() -> db.deleteShop(id));
         plugin.getNpcs().resetLook(shop.getNpcId());   // bought looks leave with the owner
@@ -397,7 +412,7 @@ public class ShopManager {
         if (body != null) refreshNameTag(body);
 
         Player op = Bukkit.getPlayer(shop.getOwner());
-        if (notify && op != null) plugin.msg().send(op, "shop.released");
+        if (notify && op != null) Sched.entity(op, () -> plugin.msg().send(op, "shop.released"));
     }
 
     public void claimItems(Player p) {
@@ -405,7 +420,7 @@ public class ShopManager {
         if (!claiming.add(u)) return;
         db.async(() -> {
             List<DatabaseManager.ClaimRow> rows = db.loadClaims(u.toString());
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            Sched.entity(p, () -> {   // back on the player's thread: the database thread must not touch inventories
                 try {
                     if (!p.isOnline()) return;
                     if (rows.isEmpty()) {
@@ -427,7 +442,7 @@ public class ShopManager {
                 } finally {
                     claiming.remove(u);
                 }
-            });
+            }, () -> claiming.remove(u));   // the player logged out before we got back: free the lock
         });
     }
 
@@ -443,10 +458,30 @@ public class ShopManager {
         return Math.max(0, lvl);
     }
 
+    /** Vault-scale cost of the next level (the base curve). See {@link #upgradePrice} for what is really charged. */
     public double upgradeCost(UpgradeType t, PlayerProfile p) {
         double base = cfg().getDouble("upgrades." + t.key + ".base-cost", 10000);
         double mult = cfg().getDouble("upgrades." + t.key + ".multiplier", 1.5);
         return Math.round(base * Math.pow(mult, level(t, p)) * 100.0) / 100.0;
+    }
+
+    /**
+     * What the next level costs, and in which currency. Every level uses {@code upgrades.<type>.currency} (default
+     * Vault). With an {@code upgrades.<type>.premium} section, levels from {@code from-level} on use that section's
+     * own currency and cost curve instead, so only the higher tiers cost premium currency.
+     */
+    public Price upgradePrice(UpgradeType t, PlayerProfile p) {
+        var eco = plugin.getEconomies();
+        String path = "upgrades." + t.key;
+        int lvl = level(t, p);
+        var premium = cfg().getConfigurationSection(path + ".premium");
+        if (premium != null && lvl >= premium.getInt("from-level", Integer.MAX_VALUE)) {
+            double base = premium.getDouble("base-cost", 100);
+            double mult = premium.getDouble("multiplier", 1.0);
+            double cost = base * Math.pow(mult, lvl - premium.getInt("from-level", 0));
+            return eco.price(premium.getString("currency", "playerpoints"), cost);
+        }
+        return eco.price(cfg().getString(path + ".currency", "vault"), upgradeCost(t, p));
     }
 
     public boolean purchaseUpgrade(Player pl, UpgradeType t) {
@@ -459,7 +494,7 @@ public class ShopManager {
             plugin.msg().send(pl, "upgrade.maxed");
             return false;
         }
-        if (!charge(pl, upgradeCost(t, p))) return false;
+        if (!charge(pl, upgradePrice(t, p))) return false;
         switch (t) {
             case SLOTS -> { p.setSlotLevel(p.getSlotLevel() + 1); recomputeSlots(p); }
             case TAX -> p.setTaxLevel(p.getTaxLevel() + 1);
@@ -493,6 +528,12 @@ public class ShopManager {
         return cfg().getDouble(s.kind() == Skins.Kind.TYPE ? "skins.type-price" : "skins.profession-price", 15000.0);
     }
 
+    /** Currency for one skin: {@code skins.currencies.<key>}, else {@code skins.currency}, else Vault. */
+    public Price skinCost(Skins.Skin s) {
+        String cur = cfg().getString("skins.currencies." + s.key(), cfg().getString("skins.currency", "vault"));
+        return plugin.getEconomies().price(cur, skinPrice(s));
+    }
+
     public boolean owns(PlayerProfile p, Skins.Skin s) { return s.isFree() || p.ownsSkin(s.id()); }
 
     public boolean isEquipped(PlayerProfile p, Skins.Skin s) {
@@ -518,7 +559,7 @@ public class ShopManager {
             plugin.msg().send(pl, "custom-gui.skin-no-access-msg", "skin", s.name());
             return false;
         }
-        if (!charge(pl, skinPrice(s))) return false;
+        if (!charge(pl, skinCost(s))) return false;
         p.unlockSkin(s.id());
         plugin.msg().send(pl, "skins.unlocked", "skin", s.name());
         equipSkin(pl, s);

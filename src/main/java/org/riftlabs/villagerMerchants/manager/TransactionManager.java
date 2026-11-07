@@ -9,6 +9,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.database.DatabaseManager;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.TxMode;
 import org.riftlabs.villagerMerchants.database.DatabaseManager.TxRow;
@@ -43,7 +44,7 @@ public class TransactionManager {
     private final VillagerMerchants plugin;
     private final DatabaseManager db;
     /** "shopId|ownerId" -> lifetime trade executions. Keyed by owner so a new renter starts at zero. */
-    private final Map<String, Long> salesCounts = new HashMap<>();
+    private final Map<String, Long> salesCounts = new java.util.concurrent.ConcurrentHashMap<>();
     /** Server-wide running totals (seeded on startup from the sales_totals table, which log purges never touch). Adders, so placeholder reads from any thread are safe. */
     private final LongAdder totalSales = new LongAdder();
     private final DoubleAdder totalMoney = new DoubleAdder();
@@ -133,7 +134,8 @@ public class TransactionManager {
         totalMoney.add(total);
         if (money && plugin.getLeaderboards() != null) plugin.getLeaderboards().recordEarning(seller, total);
 
-        if (sellerOnline != null && notifyOn) notifySale(sellerOnline, row);
+        // the seller may be on another region than the buyer: message them from their own thread
+        if (sellerOnline != null && notifyOn) Sched.entity(sellerOnline, () -> notifySale(sellerOnline, row));
     }
 
     private String paySummary(Trade t, int times) {
@@ -174,12 +176,12 @@ public class TransactionManager {
         String seller = p.getUniqueId().toString();
         long delay = Math.max(0, cfg().getLong("notifications.join-delay-ticks", 60L));
 
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+        Sched.entityLater(p, () -> {
             if (!p.isOnline()) return;
             db.async(() -> {
                 DatabaseManager.Unread un = db.takeUnread(seller, maxLines);
                 if (un.maxId() == 0) return;
-                plugin.sync(() -> { if (p.isOnline()) showJoinSummary(p, un); });
+                plugin.syncFor(p, () -> { if (p.isOnline()) showJoinSummary(p, un); });
             });
         }, delay);
     }
@@ -224,7 +226,7 @@ public class TransactionManager {
             int pages = Math.max(1, (int) Math.ceil(tot.rows() / (double) size));
             int p = Math.min(want, pages);
             List<TxRow> rows = db.queryTransactions(mode, sid, size, (p - 1) * size);
-            plugin.sync(() -> renderHistory(viewer, mode, subjectName, tot, rows, p, pages));
+            plugin.syncFor(viewer, () -> renderHistory(viewer, mode, subjectName, tot, rows, p, pages));
         });
     }
 
@@ -264,7 +266,8 @@ public class TransactionManager {
 
     // ------------------------------------------------------------ per-shop stats (owner menu)
 
-    public void loadStats(Shop shop, Consumer<ShopStats> callback) {
+    /** The callback runs on {@code viewer}'s own thread (it normally fills that player's menu). */
+    public void loadStats(org.bukkit.entity.Entity viewer, Shop shop, Consumer<ShopStats> callback) {
         final String sid = shop.getId().toString();
         final String owner = shop.getOwner().toString();
         final long since = System.currentTimeMillis() - statsDays() * DAY_MS;
@@ -272,7 +275,7 @@ public class TransactionManager {
             DatabaseManager.Totals week = db.shopTotals(sid, owner, since);
             DatabaseManager.Totals all = db.shopTotals(sid, owner, 0L);
             ShopStats st = new ShopStats(week.sales(), week.money(), all.sales(), all.money());
-            plugin.sync(() -> callback.accept(st));
+            plugin.syncFor(viewer, () -> callback.accept(st));
         });
     }
 }

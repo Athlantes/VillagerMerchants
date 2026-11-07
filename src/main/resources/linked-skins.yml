@@ -22,6 +22,7 @@
 #   name:       MiniMessage text shown in the menu
 #   icon:       any item material
 #   price:      0 = free
+#   currency:   optional: vault (default), playerpoints or tokenmanager. price is then an amount of that currency.
 #   permission: optional node needed to use it ("" = none)
 #   locked-lore: optional. Shown while a player lacks the permission, so they know how to earn it.
 #               One MiniMessage line or a list. Your own system (quests, ranks...) gives the permission.

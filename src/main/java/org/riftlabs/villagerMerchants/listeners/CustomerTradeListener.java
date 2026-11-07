@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.listeners;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import net.kyori.adventure.text.Component;
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
@@ -50,7 +51,7 @@ public class CustomerTradeListener implements Listener {
     }
 
     private final VillagerMerchants plugin;
-    private final Map<UUID, Session> sessions = new HashMap<>(); // player -> open shop
+    private final Map<UUID, Session> sessions = new java.util.concurrent.ConcurrentHashMap<>(); // player -> open shop
 
     public CustomerTradeListener(VillagerMerchants plugin) { this.plugin = plugin; }
 
@@ -77,7 +78,7 @@ public class CustomerTradeListener implements Listener {
         for (Map.Entry<UUID, Session> e : new ArrayList<>(sessions.entrySet())) {
             if (e.getValue().shopId.equals(shopId)) {
                 Player p = Bukkit.getPlayer(e.getKey());
-                if (p != null) p.closeInventory();
+                if (p != null) Sched.entity(p, p::closeInventory);   // the customer's own thread
                 sessions.remove(e.getKey());
             }
         }
@@ -121,7 +122,7 @@ public class CustomerTradeListener implements Listener {
         Shop shop = plugin.getShopManager().getShop(s.shopId);
         if (shop == null) return;
         int idx = e.getIndex();
-        Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, s, shop, idx));
+        Sched.entityNext(p, () -> syncResultSlot(p, s, shop, idx));
     }
 
     /** Money trade: place its token in the payment slot. Item trade: make sure no token is left over. */
@@ -217,29 +218,33 @@ public class CustomerTradeListener implements Listener {
         // Anti-abuse: trade-spam cooldown (checked last, so stale windows and refused clicks don't use it up).
         if (!plugin.getAntiAbuse().allowPurchase(p, shop)) return;
 
-        int times = e.isShiftClick() ? Math.max(1, plugin.getConfig().getInt("trading.shift-click-max", 64)) : 1;
-        int done = 0;
-        Component err = null;
-        if (trade.isMoney()) {
-            Component[] holder = new Component[1];
-            done = tradeMoney(p, shop, trade, unit, times, holder);
-            err = holder[0];
-        } else {
-            while (done < times && (err = tryTrade(p, shop, trade, mi)) == null) done++;
-        }
+        // Folia: two customers on different regions can click at the same moment. The shop's stock and the earnings
+        // are one unit, so the whole purchase (check stock, charge, hand over, record) runs under the shop's lock.
+        synchronized (shop) {
+            int times = e.isShiftClick() ? Math.max(1, plugin.getConfig().getInt("trading.shift-click-max", 64)) : 1;
+            int done = 0;
+            Component err = null;
+            if (trade.isMoney()) {
+                Component[] holder = new Component[1];
+                done = tradeMoney(p, shop, trade, unit, times, holder);
+                err = holder[0];
+            } else {
+                while (done < times && (err = tryTrade(p, shop, trade, mi)) == null) done++;
+            }
 
-        if (done == 0 && err != null) p.sendMessage(err);
-        if (done > 0) {
-            shop.setDirty(true);
-            session.bought = true;
-            plugin.getTransactions().recordSale(p, shop, trade, done, unit);
-            plugin.getAntiAbuse().onSale(p, shop, trade, done, unit);
-            plugin.getRatings().recordPurchase(p, shop);
-            merchant.setRecipes(sm.buildRecipes(shop)); // re-lock sold-out trades
-            session.prices = sm.snapshotPrices(shop);
+            if (done == 0 && err != null) p.sendMessage(err);
+            if (done > 0) {
+                shop.setDirty(true);
+                session.bought = true;
+                plugin.getTransactions().recordSale(p, shop, trade, done, unit);
+                plugin.getAntiAbuse().onSale(p, shop, trade, done, unit);
+                plugin.getRatings().recordPurchase(p, shop);
+                merchant.setRecipes(sm.buildRecipes(shop)); // re-lock sold-out trades
+                session.prices = sm.snapshotPrices(shop);
+            }
         }
         final int selected = idx;
-        Bukkit.getScheduler().runTask(plugin, () -> syncResultSlot(p, session, shop, selected));
+        Sched.entityNext(p, () -> syncResultSlot(p, session, shop, selected));
         p.updateInventory();
     }
 

@@ -81,6 +81,13 @@ leaderboards:
 
 # cost of next level = base-cost * multiplier ^ currentLevel
 upgrades:
+  # Optional per upgrade (slots / tax / duration):
+  #   currency: playerpoints            pay every level in that currency (base-cost / multiplier are then in points)
+  #   premium:                          or keep early levels on Vault and charge only the higher tiers in points:
+  #     from-level: 12                  levels you already own >= this use the premium cost below
+  #     currency: playerpoints
+  #     base-cost: 200                  cost of the first premium level
+  #     multiplier: 1.1                 each further level costs this much more
   slots:
     max-level: 24
     base-cost: 10000.0
@@ -112,6 +119,10 @@ skins:                     # permanent unlocks
   #   jungle:
   #     - "<gray>Walk <white>10,000 blocks"
   #     - "<gray>to unlock this skin"
+  # Currency for skins (default vault) and per-skin overrides, e.g. sell only the jungle skin for points:
+  # currency: vault
+  # currencies:
+  #   jungle: playerpoints
   # Optional price for one specific skin (overrides type-price / profession-price):
   # prices:
   #   jungle: 20000.0
@@ -173,6 +184,28 @@ custom-items:
   # rolled stats or durability differ. Each item is still stored and handed over with its own exact data.
   # false = strict matching (isSimilar) for everything.
   match-by-id: true
+
+# ── Currencies ──────────────────────────────────────────────────────────────────
+# Vault is the main money and is always used for: player-to-player trades, rent, teleports, featured listings.
+# Skins, linked-shop looks, nametags, effects and shop upgrades can ALSO be sold for a premium currency
+# (e.g. store points) by adding a "currency:" option, see below. Needs the plugin installed; if it is missing
+# the item stays visible but can't be bought, and the player is told why.
+#   currency ids: vault (default), playerpoints, tokenmanager   (aliases: points, pp, tokens)
+# These two currencies only exist in whole numbers: a price of 99.5 is charged as 100.
+# Where to set a currency:
+#   skins:        skins.currency (all skins) and skins.currencies.<skin-id> (one skin); price stays skins.prices / type-price
+#   nametags.yml: currency: playerpoints        effects.yml: currency: playerpoints
+#   linked-skins.yml: currency: playerpoints    (the price: is then an amount of that currency)
+#   upgrades:     upgrades.<type>.currency, or an upgrades.<type>.premium section (see upgrades below)
+currencies:
+  playerpoints:
+    enabled: true
+    name: "Points"
+    format: "{amount} Points"     # {amount} is the number with thousands separators
+  tokenmanager:
+    enabled: true
+    name: "Tokens"
+    format: "{amount} Tokens"
 
 money:
   enabled: true                 # allow money-priced trades (shift-left-click "Payment 1" in the trade editor)
@@ -394,6 +427,7 @@ gui:
     owner-staff: PLAYER_HEAD
     owner-customize: VILLAGER_SPAWN_EGG
     owner-stats: BOOK
+    owner-analytics: MAP
     owner-cancel: BARRIER
     owner-cancel-confirm: TNT
     # upgrades
@@ -442,3 +476,20 @@ gui:
 
 modelengine:
   base-entity: VILLAGER    # entity type /vm meg create puts the model on (AI off, invulnerable, hidden by the model)
+
+# Map dashboard for shop owners: /vm analytics, or the map button in the owner menu.
+# Revenue per day / week, best sellers, unique customers and rating history, drawn on a map held in the hotbar.
+analytics:
+  enabled: true
+  staff-access: false        # also let staff who hold the STATS role permission open the owner's dashboard
+  accent: gold               # gold, aqua, green, purple, pink, red, blue
+  currency-symbol: "$"       # shown in front of money amounts (keep it short: it is drawn in a pixel font)
+  days: 14                   # bars in the daily view (7-21)
+  weeks: 8                   # bars in the weekly view (4-12)
+  default-range: day         # day | week
+  refresh-seconds: 15        # re-check for new sales while open (0 = never refresh)
+  idle-timeout-seconds: 120  # puts the map away when nobody touches it (0 = never)
+  sounds:                    # sound ids, empty = silent
+    open: "item.book.page_turn"
+    flip: "ui.button.click"
+    close: "item.book.put"

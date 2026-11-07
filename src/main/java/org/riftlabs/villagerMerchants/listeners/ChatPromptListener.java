@@ -1,5 +1,6 @@
 package org.riftlabs.villagerMerchants.listeners;
 
+import org.riftlabs.villagerMerchants.util.Sched;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -44,7 +45,7 @@ public class ChatPromptListener implements Listener {
         if (pr == null) return;
         e.setCancelled(true);
         String text = Text.plain(e.message()).trim();
-        Bukkit.getScheduler().runTask(plugin, () -> {
+        Sched.entityNext(p, () -> {
             if (!prompts.remove(p.getUniqueId(), pr) || !p.isOnline()) return;
             if (System.currentTimeMillis() > pr.expires()) {
                 plugin.msg().send(p, "prompts.timed-out");

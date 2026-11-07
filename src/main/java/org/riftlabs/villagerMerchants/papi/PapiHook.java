@@ -1,7 +1,7 @@
 package org.riftlabs.villagerMerchants.papi;
 
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitTask;
+import org.riftlabs.villagerMerchants.util.Sched;
 import org.riftlabs.villagerMerchants.VillagerMerchants;
 import org.riftlabs.villagerMerchants.model.Shop;
 
@@ -31,7 +31,7 @@ public final class PapiHook {
     private final VillagerMerchants plugin;
     private volatile Snapshot snapshot = Snapshot.EMPTY;
     private VmExpansion expansion;
-    private BukkitTask task;
+    private volatile Sched.Handle task;
 
     private PapiHook(VillagerMerchants plugin) {
         this.plugin = plugin;
@@ -66,10 +66,10 @@ public final class PapiHook {
 
     private void startTask() {
         long ticks = Math.max(1, plugin.getConfig().getLong("placeholders.refresh-seconds", 5)) * 20L;
-        task = Bukkit.getScheduler().runTaskTimer(plugin, this::refresh, ticks, ticks);
+        task = Sched.globalTimer(this::refresh, ticks, ticks);
     }
 
-    /** Rebuilds the snapshot. Main thread only: it reads the live shop map. */
+    /** Rebuilds the snapshot from the (concurrent) shop map. Placeholders then read the finished snapshot from any thread. */
     private void refresh() {
         var shops = plugin.getShopManager();
         var tx = plugin.getTransactions();
